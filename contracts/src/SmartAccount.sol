@@ -30,6 +30,11 @@ contract SmartAccount {
         _;
     }
     
+    modifier onlySelf() {
+        require(msg.sender == address(this), "SmartAccount: caller is not self");
+        _;
+    }
+    
     // Entry point reference
     IEntryPoint public immutable entryPoint;
     
@@ -101,12 +106,20 @@ contract SmartAccount {
         onlyEntryPoint
         returns (uint256)
     {
-        // TODO: Implement signature validation logic
-        // For now, just return 0 (no validation gas cost)
+        // Verify nonce hasn't been used
+        require(nonces[uint192(userOp.nonce)] == 0, "SmartAccount: nonce already used");
+        
+        // Mark nonce as used
+        nonces[uint192(userOp.nonce)] = 1;
+        
+        // Verify signature
+        require(isValidSignature(userOpHash, userOp.signature), "SmartAccount: invalid signature");
+        
+        // Return validation gas cost (0 for now, can be adjusted based on complexity)
         return 0;
     }
 
-    function execute(address target, uint256 value, bytes calldata data) external onlyOwner {
+    function execute(address target, uint256 value, bytes calldata data) external onlySelf {
         require(target != address(0), "SmartAccount: invalid target");
         
         (bool success, ) = target.call{value: value}(data);
@@ -117,7 +130,7 @@ contract SmartAccount {
 
     function executeBatch(address[] calldata targets, uint256[] calldata values, bytes[] calldata datas)
         external
-        onlyOwner
+        onlySelf
     {
         require(
             targets.length == values.length && targets.length == datas.length,
@@ -139,9 +152,60 @@ contract SmartAccount {
     }
 
     function isValidSignature(bytes32 hash, bytes calldata signature) public view returns (bool) {
-        // TODO: Implement signature validation
-        // For now, return false
-        return false;
+        // Check if signature length is valid (65 bytes: r, s, v)
+        if (signature.length != 65) {
+            return false;
+        }
+        
+        // Extract r, s, v from signature using memory
+        bytes memory sig = signature;
+        bytes32 r;
+        bytes32 s;
+        uint8 v;
+        
+        assembly {
+            r := mload(add(sig, 32))
+            s := mload(add(sig, 64))
+            v := byte(0, mload(add(sig, 96)))
+        }
+        
+        // Ensure v is valid (27 or 28)
+        if (v < 27) v += 27;
+        if (v != 27 && v != 28) {
+            return false;
+        }
+        
+        // Recover signer address
+        address signer = ecrecover(hash, v, r, s);
+        
+        // Check if signer is an authorized owner
+        return owners[signer];
+    }
+    
+    // Function to execute transactions from EntryPoint
+    function _executeFromEntryPoint(address target, uint256 value, bytes calldata data) internal {
+        require(target != address(0), "SmartAccount: invalid target");
+        
+        (bool success, ) = target.call{value: value}(data);
+        require(success, "SmartAccount: execution failed");
+        
+        emit TransactionExecuted(target, value, data);
+    }
+    
+    function _executeBatchFromEntryPoint(address[] calldata targets, uint256[] calldata values, bytes[] calldata datas) internal {
+        require(
+            targets.length == values.length && targets.length == datas.length,
+            "SmartAccount: array length mismatch"
+        );
+        
+        for (uint256 i = 0; i < targets.length; i++) {
+            require(targets[i] != address(0), "SmartAccount: invalid target");
+            
+            (bool success, ) = targets[i].call{value: values[i]}(datas[i]);
+            require(success, "SmartAccount: batch execution failed");
+        }
+        
+        emit BatchTransactionExecuted(targets, values, datas);
     }
 
     receive() external payable {}
