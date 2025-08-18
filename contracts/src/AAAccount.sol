@@ -21,18 +21,66 @@ contract AAAccount is BaseAccount {
     event OwnerRemoved(address indexed owner);
     event TransactionExecuted(address indexed target, uint256 value, bytes data);
     event BatchTransactionExecuted(address[] targets, uint256[] values, bytes[] datas);
+    event AccountInitialized(address indexed owner);
 
     IEntryPoint private immutable _entryPoint;
+    bool private _initialized;
 
     constructor(IEntryPoint anEntryPoint, address initialOwner) {
         _entryPoint = anEntryPoint;
         
-        // Add initial owner
-        owners[initialOwner] = true;
-        ownerList.push(initialOwner);
-        ownerCount = 1;
+        // Only initialize if initialOwner is not zero (direct deployment)
+        if (initialOwner != address(0)) {
+            _initialize(initialOwner);
+        }
+    }
+
+    /**
+     * @dev Initialize the account with a single owner (for factory deployment)
+     * @param owner The initial owner
+     */
+    function initialize(address owner) external {
+        require(!_initialized, "AAAccount: already initialized");
+        require(owner != address(0), "AAAccount: owner cannot be zero");
+        _initialized = true;
+        _initialize(owner);
+    }
+
+    /**
+     * @dev Initialize the account with multiple owners (for factory deployment)
+     * @param initialOwners Array of initial owners
+     */
+    function initializeWithOwners(address[] calldata initialOwners) external {
+        require(!_initialized, "AAAccount: already initialized");
+        require(initialOwners.length > 0, "AAAccount: owners array cannot be empty");
+        require(initialOwners.length <= 10, "AAAccount: too many owners (max 10)");
         
-        emit OwnerAdded(initialOwner);
+        _initialized = true;
+        
+        // Validate and add all owners
+        for (uint256 i = 0; i < initialOwners.length; i++) {
+            require(initialOwners[i] != address(0), "AAAccount: owner cannot be zero");
+            require(!owners[initialOwners[i]], "AAAccount: duplicate owner");
+            
+            owners[initialOwners[i]] = true;
+            ownerList.push(initialOwners[i]);
+            emit OwnerAdded(initialOwners[i]);
+        }
+        
+        ownerCount = initialOwners.length;
+        emit AccountInitialized(initialOwners[0]);
+    }
+
+    /**
+     * @dev Internal initialization function
+     * @param owner The initial owner
+     */
+    function _initialize(address owner) private {
+        owners[owner] = true;
+        ownerList.push(owner);
+        ownerCount = 1;
+        emit OwnerAdded(owner);
+        emit AccountInitialized(owner);
     }
 
     function entryPoint() public view override returns (IEntryPoint) {

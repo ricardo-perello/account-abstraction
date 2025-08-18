@@ -88,11 +88,6 @@ enum Commands {
     },
     
     /// Submit a UserOperation to a bundler
-    /// TODO: UPDATE TO WORK WITH SMART ACCOUNTS
-    /// Currently this creates UserOperations from EOA wallets, but you need to:
-    /// 1. Deploy AAAccount smart accounts via factory
-    /// 2. Use the smart account address as sender
-    /// 3. Sign with the EOA wallet that owns the smart account
     Submit {
         /// Private key in hex format
         #[arg(short, long)]
@@ -123,6 +118,79 @@ enum Commands {
         chain_id: u64,
     },
     
+    /// Deploy a new smart account using the factory
+    DeployAccount {
+        /// Private key in hex format (for signing deployment transaction)
+        #[arg(short, long)]
+        private_key: String,
+        
+        /// Factory contract address
+        #[arg(short, long)]
+        factory: String,
+        
+        /// Salt for deterministic deployment (hex string)
+        #[arg(short, long)]
+        salt: String,
+        
+        /// RPC URL for the network
+        #[arg(short, long, default_value = "http://localhost:8545")]
+        rpc_url: String,
+        
+        /// Chain ID
+        #[arg(short, long, default_value = "1")]
+        chain_id: u64,
+    },
+    
+    /// Deploy a new smart account with multiple owners
+    DeployMultiOwnerAccount {
+        /// Private key in hex format (for signing deployment transaction)
+        #[arg(short, long)]
+        private_key: String,
+        
+        /// Factory contract address
+        #[arg(short, long)]
+        factory: String,
+        
+        /// Comma-separated list of owner addresses
+        #[arg(short, long)]
+        owners: String,
+        
+        /// Salt for deterministic deployment (hex string)
+        #[arg(short, long)]
+        salt: String,
+        
+        /// RPC URL for the network
+        #[arg(short, long, default_value = "http://localhost:8545")]
+        rpc_url: String,
+        
+        /// Chain ID
+        #[arg(short, long, default_value = "1")]
+        chain_id: u64,
+    },
+    
+    /// Get predicted smart account address before deployment
+    PredictAddress {
+        /// Factory contract address
+        #[arg(short, long)]
+        factory: String,
+        
+        /// Owner address
+        #[arg(short, long)]
+        owner: String,
+        
+        /// Salt for deterministic deployment (hex string)
+        #[arg(short, long)]
+        salt: String,
+        
+        /// RPC URL for the network
+        #[arg(short, long, default_value = "http://localhost:8545")]
+        rpc_url: String,
+        
+        /// Chain ID
+        #[arg(short, long, default_value = "1")]
+        chain_id: u64,
+    },
+    
     /// Generate a new random wallet
     GenerateWallet,
     
@@ -147,6 +215,15 @@ async fn main() -> Result<()> {
         }
         Commands::Submit { private_key, target, call_data, nonce, rpc_url, entry_point, chain_id } => {
             submit_user_operation(private_key, target, call_data, *nonce, rpc_url, entry_point, *chain_id).await?;
+        }
+        Commands::DeployAccount { private_key, factory, salt, rpc_url, chain_id } => {
+            deploy_smart_account(private_key, factory, salt, rpc_url, *chain_id).await?;
+        }
+        Commands::DeployMultiOwnerAccount { private_key, factory, owners, salt, rpc_url, chain_id } => {
+            deploy_multi_owner_account(private_key, factory, owners, salt, rpc_url, *chain_id).await?;
+        }
+        Commands::PredictAddress { factory, owner, salt, rpc_url, chain_id } => {
+            predict_smart_account_address(factory, owner, salt, rpc_url, *chain_id).await?;
         }
         Commands::GenerateWallet => {
             generate_wallet().await?;
@@ -323,6 +400,86 @@ fn show_wallet_info(private_key: &str) -> Result<()> {
         Ok(pub_key) => println!("Public Key: 0x{}", hex::encode(pub_key)),
         Err(e) => println!("Could not derive public key: {}", e),
     }
+    
+    Ok(())
+}
+
+/// Deploy a new smart account using the factory
+async fn deploy_smart_account(
+    private_key: &str,
+    factory: &str,
+    salt: &str,
+    rpc_url: &str,
+    chain_id: u64,
+) -> Result<()> {
+    println!("Deploying new smart account...");
+    
+    // TODO: IMPLEMENT SMART ACCOUNT DEPLOYMENT
+    // This function needs to:
+    // 1. Create wallet from private key
+    // 2. Call factory.createAccount() via RPC
+    // 3. Sign the deployment transaction
+    // 4. Submit to network
+    
+    println!("Smart account deployment not yet implemented");
+    println!("Factory: {}", factory);
+    println!("Salt: {}", salt);
+    println!("RPC: {}", rpc_url);
+    println!("Chain ID: {}", chain_id);
+    
+    Ok(())
+}
+
+/// Deploy a new smart account with multiple owners
+async fn deploy_multi_owner_account(
+    private_key: &str,
+    factory: &str,
+    owners: &str,
+    salt: &str,
+    rpc_url: &str,
+    chain_id: u64,
+) -> Result<()> {
+    println!("Deploying new multi-owner smart account...");
+    
+    // TODO: IMPLEMENT MULTI-OWNER SMART ACCOUNT DEPLOYMENT
+    // This function needs to:
+    // 1. Parse comma-separated owners list
+    // 2. Create wallet from private key
+    // 3. Call factory.createAccountWithOwners() via RPC
+    // 4. Sign the deployment transaction
+    // 5. Submit to network
+    
+    println!("Multi-owner smart account deployment not yet implemented");
+    println!("Factory: {}", factory);
+    println!("Owners: {}", owners);
+    println!("Salt: {}", salt);
+    println!("RPC: {}", rpc_url);
+    println!("Chain ID: {}", chain_id);
+    
+    Ok(())
+}
+
+/// Predict smart account address before deployment
+async fn predict_smart_account_address(
+    factory: &str,
+    owner: &str,
+    salt: &str,
+    rpc_url: &str,
+    chain_id: u64,
+) -> Result<()> {
+    println!("Predicting smart account address...");
+    
+    // TODO: IMPLEMENT ADDRESS PREDICTION
+    // This function needs to:
+    // 1. Call factory.getAddress() via RPC
+    // 2. Display the predicted address
+    
+    println!("Address prediction not yet implemented");
+    println!("Factory: {}", factory);
+    println!("Owner: {}", owner);
+    println!("Salt: {}", salt);
+    println!("RPC: {}", rpc_url);
+    println!("Chain ID: {}", chain_id);
     
     Ok(())
 }
