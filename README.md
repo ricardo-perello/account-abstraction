@@ -2,9 +2,6 @@
 
 A complete implementation of Ethereum Account Abstraction (ERC-4337) featuring a Rust client and Solidity smart contracts.
 
-## 🚀 **Status: Production Ready**
-
-All critical components have been implemented and tested. The client is ready for production use with real networks.
 
 ## 📁 **Repository Structure**
 
