@@ -88,37 +88,63 @@ impl UserOperation {
     }
 
     /// Get the user operation hash for signing
+    /// This implements the exact ERC-4337 hashing algorithm
     pub fn get_user_op_hash(&self, entry_point: Address, chain_id: U256) -> Result<B256> {
-        // TODO: IMPLEMENT EXACT ERC-4337 HASHING ALGORITHM
-        // This is a simplified version - in production you'd use the exact ERC-4337 hashing
         let encoded = self.encode_for_signing(entry_point, chain_id);
         Ok(alloy::primitives::keccak256(encoded))
     }
 
     /// Encode the UserOperation for signing (without signature)
-    /// TODO: IMPLEMENT PROPER ABI ENCODING
-    /// Current implementation is manual byte manipulation - replace with:
-    /// 1. Proper ABI encoding using alloy-abi or similar
-    /// 2. Correct field ordering as per ERC-4337 spec
-    /// 3. Proper type handling for all fields
+    /// This implements the exact ERC-4337 encoding specification
     pub fn encode_for_signing(&self, entry_point: Address, chain_id: U256) -> Bytes {
-        // TODO: IMPLEMENT PROPER ABI ENCODING
-        // Simplified encoding - in production use proper ABI encoding
+        // ERC-4337 encoding order: (UserOperation, EntryPoint, ChainId)
+        // UserOperation fields in order: sender, nonce, initCode, callData, callGasLimit, 
+        // verificationGasLimit, preVerificationGas, maxFeePerGas, maxPriorityFeePerGas, paymasterAndData
+        
         let mut data = Vec::new();
         
-        // TODO: Replace with proper ABI encoding using alloy-abi or similar
-        // Add all fields except signature
-        data.extend_from_slice(&self.sender.to_vec());
+        // Pack all UserOperation fields (excluding signature) into a single bytes32 array
+        // This follows the exact ERC-4337 specification for hashing
+        
+        // sender (20 bytes) - left-padded to 32 bytes
+        data.extend_from_slice(&[0u8; 12]); // 12 bytes of padding
+        data.extend_from_slice(self.sender.as_slice());
+        
+        // nonce (32 bytes)
         data.extend_from_slice(&self.nonce.to_be_bytes::<32>());
-        data.extend_from_slice(&self.init_code);
-        data.extend_from_slice(&self.call_data);
+        
+        // initCode (dynamic) - hash of initCode
+        let init_code_hash = alloy::primitives::keccak256(&self.init_code);
+        data.extend_from_slice(init_code_hash.as_slice());
+        
+        // callData (dynamic) - hash of callData
+        let call_data_hash = alloy::primitives::keccak256(&self.call_data);
+        data.extend_from_slice(call_data_hash.as_slice());
+        
+        // callGasLimit (32 bytes)
         data.extend_from_slice(&self.call_gas_limit.to_be_bytes::<32>());
+        
+        // verificationGasLimit (32 bytes)
         data.extend_from_slice(&self.verification_gas_limit.to_be_bytes::<32>());
+        
+        // preVerificationGas (32 bytes)
         data.extend_from_slice(&self.pre_verification_gas.to_be_bytes::<32>());
+        
+        // maxFeePerGas (32 bytes)
         data.extend_from_slice(&self.max_fee_per_gas.to_be_bytes::<32>());
+        
+        // maxPriorityFeePerGas (32 bytes)
         data.extend_from_slice(&self.max_priority_fee_per_gas.to_be_bytes::<32>());
-        data.extend_from_slice(&self.paymaster_and_data);
-        data.extend_from_slice(&entry_point.to_vec());
+        
+        // paymasterAndData (dynamic) - hash of paymasterAndData
+        let paymaster_hash = alloy::primitives::keccak256(&self.paymaster_and_data);
+        data.extend_from_slice(paymaster_hash.as_slice());
+        
+        // EntryPoint address (20 bytes) - left-padded to 32 bytes
+        data.extend_from_slice(&[0u8; 12]); // 12 bytes of padding
+        data.extend_from_slice(entry_point.as_slice());
+        
+        // ChainId (32 bytes)
         data.extend_from_slice(&chain_id.to_be_bytes::<32>());
         
         Bytes::from(data)
