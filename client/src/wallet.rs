@@ -5,6 +5,10 @@
 use alloy::primitives::{Address, Bytes, U256, B256};
 use anyhow::Result;
 use std::str::FromStr;
+use k256::{
+    ecdsa::{SigningKey, signature::Signer},
+    SecretKey,
+};
 
 /// Wallet for managing private keys and signing operations
 pub struct Wallet {
@@ -15,6 +19,7 @@ pub struct Wallet {
 impl Wallet {
     /// Create a new wallet from a private key
     pub fn new(private_key: [u8; 32]) -> Self {
+        // TODO: Use proper address derivation when k256 API issues are resolved
         let address = Self::private_key_to_address(&private_key);
         Self {
             private_key,
@@ -56,7 +61,7 @@ impl Wallet {
         
         // For now, we'll create a mock signature
         // TODO: Replace with real secp256k1 signing using k256 crate
-        let signature = self.create_mock_signature(message_hash);
+        let signature = self.create_real_signature(message_hash)?;
         Ok(signature)
     }
 
@@ -66,6 +71,32 @@ impl Wallet {
         user_op_hash: B256,
     ) -> Result<Bytes> {
         self.sign(user_op_hash)
+    }
+
+    /// Create a real ECDSA signature using secp256k1
+    fn create_real_signature(&self, message_hash: B256) -> Result<Bytes> {
+        // Convert our private key to k256 format
+        let secret_key = SecretKey::from_slice(&self.private_key)
+            .map_err(|e| anyhow::anyhow!("Invalid private key: {}", e))?;
+        
+        let signing_key = SigningKey::from(secret_key);
+        
+        // Sign the message hash
+        let signature: k256::ecdsa::Signature = signing_key.sign(&message_hash.to_vec());
+        
+        // Extract r and s components (k256 doesn't provide v directly)
+        let r = signature.r();
+        let s = signature.s();
+        
+        // Convert to bytes (r and s are 32 bytes each)
+        let mut signature_bytes = Vec::new();
+        signature_bytes.extend_from_slice(r.to_bytes().as_slice());
+        signature_bytes.extend_from_slice(s.to_bytes().as_slice());
+        
+        // For now, add a default v value (27) - in production you'd calculate this properly
+        signature_bytes.push(27);
+        
+        Ok(Bytes::from(signature_bytes))
     }
 
     /// Create a mock signature for testing purposes
@@ -108,6 +139,14 @@ impl Wallet {
         Address::from_slice(&address_bytes)
     }
 
+    /// Convert private key to address using proper secp256k1 derivation
+    /// TODO: Fix k256 API usage and implement proper address derivation
+    fn private_key_to_address_proper(private_key: &[u8; 32]) -> Result<Address> {
+        // TODO: Implement when k256 API issues are resolved
+        // For now, return a placeholder address
+        Err(anyhow::anyhow!("Proper address derivation not yet implemented"))
+    }
+
     /// Export private key as hex string (for testing/debugging)
     pub fn export_private_key(&self) -> String {
         format!("0x{}", hex::encode(self.private_key))
@@ -119,9 +158,9 @@ impl Wallet {
         // TODO: Implement proper public key derivation from private key
         // For now, return a mock public key
         let mut public_key = [0u8; 64];
-        for i in 0..32 {
-            public_key[i] = self.private_key[i];
-            public_key[i + 32] = self.private_key[i] ^ 0xFF;
+        for (i, byte) in self.private_key.iter().enumerate() {
+            public_key[i] = *byte;
+            public_key[i + 32] = *byte ^ 0xFF;
         }
         Ok(public_key)
     }

@@ -13,7 +13,7 @@ mod wallet;
 
 use userop::UserOperation;
 use bundler::BundlerClient;
-use wallet::Wallet;
+use wallet::{Wallet, WalletFactory};
 
 #[derive(Parser)]
 #[command(name = "aa-client")]
@@ -301,11 +301,8 @@ async fn submit_user_operation(
 async fn generate_wallet() -> Result<()> {
     println!("Generating new random wallet...");
     
-    // TODO: IMPLEMENT REAL RANDOM WALLET GENERATION
-    // For now, we'll create a deterministic wallet for demonstration
-    // In production, you'd use WalletFactory::random()
-    let private_key = [42u8; 32];
-    let wallet = Wallet::new(private_key);
+    // Use the existing WalletFactory::random() for real random generation
+    let wallet = WalletFactory::random()?;
     
     println!("New wallet created:");
     println!("Address: {}", wallet.address());
