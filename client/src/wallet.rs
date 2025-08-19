@@ -244,10 +244,136 @@ mod tests {
     }
 
     #[test]
+    fn test_wallet_from_hex_without_prefix() {
+        let hex_key = "1".repeat(64);
+        let wallet = Wallet::from_hex(&hex_key).unwrap();
+        assert_eq!(wallet.export_private_key(), format!("0x{}", hex_key));
+    }
+
+    #[test]
+    fn test_wallet_from_hex_invalid_length() {
+        let hex_key = "1".repeat(63); // Too short
+        let result = Wallet::from_hex(&hex_key);
+        assert!(result.is_err());
+        
+        let hex_key = "1".repeat(65); // Too long
+        let result = Wallet::from_hex(&hex_key);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_wallet_from_hex_invalid_chars() {
+        let hex_key = format!("0x{}", "g".repeat(64)); // Invalid hex chars
+        let result = Wallet::from_hex(&hex_key);
+        assert!(result.is_err());
+    }
+
+    #[test]
     fn test_signature_creation() {
         let wallet = Wallet::new([1u8; 32]);
         let message_hash = B256::from([1u8; 32]);
         let signature = wallet.sign(message_hash).unwrap();
         assert_eq!(signature.len(), 65); // r(32) + s(32) + v(1)
+    }
+
+    #[test]
+    fn test_user_operation_signing() {
+        let wallet = Wallet::new([1u8; 32]);
+        let message_hash = B256::from([1u8; 32]);
+        let signature = wallet.sign_user_operation(message_hash).unwrap();
+        assert_eq!(signature.len(), 65);
+    }
+
+    #[test]
+    fn test_public_key_derivation() {
+        let wallet = Wallet::new([1u8; 32]);
+        let public_key = wallet.public_key().unwrap();
+        assert_eq!(public_key.len(), 64); // x(32) + y(32)
+    }
+
+    #[test]
+    fn test_wallet_factory_random() {
+        let wallet1 = WalletFactory::random().unwrap();
+        let wallet2 = WalletFactory::random().unwrap();
+        
+        // Should generate different wallets
+        assert_ne!(wallet1.address(), wallet2.address());
+        assert_ne!(wallet1.export_private_key(), wallet2.export_private_key());
+    }
+
+    #[test]
+    fn test_wallet_factory_from_mnemonic() {
+        let mnemonic = "test mnemonic phrase";
+        let wallet1 = WalletFactory::from_mnemonic(mnemonic).unwrap();
+        let wallet2 = WalletFactory::from_mnemonic(mnemonic).unwrap();
+        
+        // Should generate deterministic wallets from same mnemonic
+        assert_eq!(wallet1.address(), wallet2.address());
+        assert_eq!(wallet1.export_private_key(), wallet2.export_private_key());
+    }
+
+    #[test]
+    fn test_wallet_factory_from_different_mnemonics() {
+        let mnemonic1 = "test mnemonic phrase one";
+        let mnemonic2 = "test mnemonic phrase two";
+        
+        let wallet1 = WalletFactory::from_mnemonic(mnemonic1).unwrap();
+        let wallet2 = WalletFactory::from_mnemonic(mnemonic2).unwrap();
+        
+        // Should generate different wallets from different mnemonics
+        assert_ne!(wallet1.address(), wallet2.address());
+        assert_ne!(wallet1.export_private_key(), wallet2.export_private_key());
+    }
+
+    #[test]
+    fn test_address_consistency() {
+        let private_key = [42u8; 32];
+        let wallet1 = Wallet::new(private_key);
+        let wallet2 = Wallet::new(private_key);
+        
+        // Same private key should always generate same address
+        assert_eq!(wallet1.address(), wallet2.address());
+    }
+
+    #[test]
+    fn test_private_key_export_import() {
+        let original_wallet = WalletFactory::random().unwrap();
+        let private_key_hex = original_wallet.export_private_key();
+        let imported_wallet = Wallet::from_hex(&private_key_hex).unwrap();
+        
+        // Imported wallet should have same address
+        assert_eq!(original_wallet.address(), imported_wallet.address());
+    }
+
+    #[test]
+    fn test_signature_uniqueness() {
+        let wallet = Wallet::new([1u8; 32]);
+        let message1 = B256::from([1u8; 32]);
+        let message2 = B256::from([2u8; 32]);
+        
+        let sig1 = wallet.sign(message1).unwrap();
+        let sig2 = wallet.sign(message2).unwrap();
+        
+        // Different messages should have different signatures
+        assert_ne!(sig1, sig2);
+    }
+
+    #[test]
+    fn test_wallet_address_format() {
+        let wallet = Wallet::new([1u8; 32]);
+        let address = wallet.address();
+        
+        // Address should be 20 bytes
+        assert_eq!(address.as_slice().len(), 20);
+    }
+
+    #[test]
+    fn test_private_key_format() {
+        let wallet = Wallet::new([1u8; 32]);
+        let private_key = wallet.export_private_key();
+        
+        // Should start with 0x and be 66 characters total
+        assert!(private_key.starts_with("0x"));
+        assert_eq!(private_key.len(), 66);
     }
 }
