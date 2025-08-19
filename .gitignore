@@ -44,3 +44,5 @@ Thumbs.db
 # Temporary files
 *.tmp
 *.temp
+
+docs/aa_sdk_rs/

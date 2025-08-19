@@ -1,13 +1,11 @@
 // Full implementation with real network calls and ABIs
 // This implements actual bundler RPC calls and contract interactions
 
-use alloy::primitives::{Address, U256, B256};
+use alloy::primitives::{Address, U256};
 use alloy::providers::{Provider, ProviderBuilder};
 use alloy::sol;
 use anyhow::Result;
 use url::Url;
-use serde::{Deserialize, Serialize};
-use serde_json::json;
 
 // Standard ERC-4337 SimpleAccountFactory ABI
 sol!(
@@ -99,35 +97,7 @@ sol!(
     ]"#
 );
 
-// Real bundler JSON-RPC request/response types
-#[derive(Debug, Clone, Serialize)]
-pub struct JsonRpcRequest {
-    pub jsonrpc: String,
-    pub method: String,
-    pub params: serde_json::Value,
-    pub id: u64,
-}
-
-#[derive(Debug, Clone, Deserialize)]
-pub struct JsonRpcResponse<T> {
-    #[allow(dead_code)]
-    pub jsonrpc: String,
-    #[allow(dead_code)]
-    pub id: u64,
-    pub result: Option<T>,
-    pub error: Option<JsonRpcError>,
-}
-
-#[derive(Debug, Clone, Deserialize)]
-pub struct JsonRpcError {
-    pub code: i32,
-    pub message: String,
-    #[allow(dead_code)]
-    pub data: Option<serde_json::Value>,
-}
-
-// Note: Compatibility types moved to aa-sdk-rs
-// UserOperationResponse and GasEstimate are re-exported from userop module when needed
+// JSON-RPC types removed - SmartAccountProvider handles all RPC communication
 
 /// Modern bundler client wrapper that can create aa-sdk-rs providers
 /// This provides compatibility while enabling use of aa-sdk-rs functionality
@@ -150,7 +120,8 @@ impl BundlerClient {
         }
     }
 
-    /// Get the RPC URL
+    /// Get the RPC URL (useful for debugging)
+    #[allow(dead_code)]
     pub fn rpc_url(&self) -> &str {
         &self.rpc_url
     }
@@ -192,163 +163,20 @@ impl BundlerClient {
         Ok(result._0)
     }
 
-    /// Submit UserOperation to bundler via eth_sendUserOperation
-    pub async fn submit_user_operation(&self, user_op: &aa_sdk_rs::types::UserOperationRequest) -> Result<B256> {
-        let client = reqwest::Client::new();
-        
-        // Convert UserOperationRequest to JSON format expected by bundlers
-        let user_op_json = self.user_op_to_json(user_op)?;
-        
-        let request = JsonRpcRequest {
-            jsonrpc: "2.0".to_string(),
-            method: "eth_sendUserOperation".to_string(),
-            params: json!([user_op_json, self.entry_point]),
-            id: 1,
-        };
+    // Manual JSON-RPC methods removed - now using aa-sdk-rs SmartAccountProvider
+    // The SmartAccountProvider handles all bundler interactions through proper traits
 
-        let response = client
-            .post(&self.rpc_url)
-            .header("Content-Type", "application/json")
-            .json(&request)
-            .send()
-            .await?;
-
-        let rpc_response: JsonRpcResponse<String> = response.json().await?;
-        
-        if let Some(error) = rpc_response.error {
-            return Err(anyhow::anyhow!("RPC Error {}: {}", error.code, error.message));
-        }
-
-        let hash_str = rpc_response.result.ok_or_else(|| anyhow::anyhow!("No result in response"))?;
-        let hash = B256::from_slice(&hex::decode(hash_str.strip_prefix("0x").unwrap_or(&hash_str))?);
-        Ok(hash)
-    }
-
-    /// Get real gas estimation from bundler via eth_estimateUserOperationGas
-    pub async fn estimate_user_operation_gas(&self, user_op: &aa_sdk_rs::types::UserOperationRequest) -> Result<aa_sdk_rs::types::UserOperationGasEstimation> {
-        let client = reqwest::Client::new();
-        
-        let user_op_json = self.user_op_to_json(user_op)?;
-        
-        let request = JsonRpcRequest {
-            jsonrpc: "2.0".to_string(),
-            method: "eth_estimateUserOperationGas".to_string(),
-            params: json!([user_op_json, self.entry_point]),
-            id: 1,
-        };
-
-        let response = client
-            .post(&self.rpc_url)
-            .header("Content-Type", "application/json")
-            .json(&request)
-            .send()
-            .await?;
-
-        let rpc_response: JsonRpcResponse<serde_json::Value> = response.json().await?;
-        
-        if let Some(error) = rpc_response.error {
-            return Err(anyhow::anyhow!("RPC Error {}: {}", error.code, error.message));
-        }
-
-        let result = rpc_response.result.ok_or_else(|| anyhow::anyhow!("No result in response"))?;
-        
-        // Parse the gas estimation response
-        let pre_verification_gas = U256::from_str_radix(
-            result["preVerificationGas"].as_str().unwrap_or("0x0"), 
-            16
-        )?;
-        let verification_gas_limit = U256::from_str_radix(
-            result["verificationGasLimit"].as_str().unwrap_or("0x0"), 
-            16
-        )?;
-        let call_gas_limit = U256::from_str_radix(
-            result["callGasLimit"].as_str().unwrap_or("0x0"), 
-            16
-        )?;
-
-        Ok(aa_sdk_rs::types::UserOperationGasEstimation {
-            pre_verification_gas,
-            verification_gas_limit,
-            call_gas_limit,
-            paymaster_verification_gas_limit: None,
-        })
-    }
-
-    /// Convert UserOperationRequest to JSON format for RPC calls
-    fn user_op_to_json(&self, user_op: &aa_sdk_rs::types::UserOperationRequest) -> Result<serde_json::Value> {
-        let sender_str = user_op.sender
-            .map(|addr| format!("0x{}", hex::encode(addr.as_slice())))
-            .unwrap_or_else(|| "0x".to_string());
-            
-        let nonce_str = user_op.nonce
-            .map(|n| format!("0x{:x}", n))
-            .unwrap_or_else(|| "0x0".to_string());
-            
-        let call_data_str = user_op.call_data.as_ref()
-            .map(|data| format!("0x{}", hex::encode(data)))
-            .unwrap_or_else(|| "0x".to_string());
-            
-        let call_gas_limit_str = user_op.call_gas_limit
-            .map(|gas| format!("0x{:x}", gas))
-            .unwrap_or_else(|| "0x0".to_string());
-            
-        let verification_gas_limit_str = user_op.verification_gas_limit
-            .map(|gas| format!("0x{:x}", gas))
-            .unwrap_or_else(|| "0x0".to_string());
-            
-        let pre_verification_gas_str = user_op.pre_verification_gas
-            .map(|gas| format!("0x{:x}", gas))
-            .unwrap_or_else(|| "0x0".to_string());
-            
-        let max_fee_per_gas_str = user_op.max_fee_per_gas
-            .map(|gas| format!("0x{:x}", gas))
-            .unwrap_or_else(|| "0x0".to_string());
-            
-        let max_priority_fee_per_gas_str = user_op.max_priority_fee_per_gas
-            .map(|gas| format!("0x{:x}", gas))
-            .unwrap_or_else(|| "0x0".to_string());
-            
-        // Combine factory and factory_data into initCode
-        let init_code_str = if let (Some(factory), Some(factory_data)) = (&user_op.factory, &user_op.factory_data) {
-            format!("0x{}{}", hex::encode(factory.as_slice()), hex::encode(factory_data))
-        } else {
-            "0x".to_string()
-        };
-        
-        let paymaster_data_str = user_op.paymaster_data.as_ref()
-            .map(|data| format!("0x{}", hex::encode(data)))
-            .unwrap_or_else(|| "0x".to_string());
-            
-        let signature_str = user_op.signature.as_ref()
-            .map(|sig| format!("0x{}", hex::encode(sig)))
-            .unwrap_or_else(|| "0x".to_string());
-
-        Ok(json!({
-            "sender": sender_str,
-            "nonce": nonce_str,
-            "initCode": init_code_str,
-            "callData": call_data_str,
-            "callGasLimit": call_gas_limit_str,
-            "verificationGasLimit": verification_gas_limit_str,
-            "preVerificationGas": pre_verification_gas_str,
-            "maxFeePerGas": max_fee_per_gas_str,
-            "maxPriorityFeePerGas": max_priority_fee_per_gas_str,
-            "paymasterAndData": paymaster_data_str,
-            "signature": signature_str
-        }))
-    }
-
-    // Note: The following methods are deprecated in favor of aa-sdk-rs SmartAccountProvider
-    // For new implementations, use SmartAccountProvider which provides:
-    // - send_user_operation() for submitting operations
-    // - estimate_user_operation_gas() for gas estimation
-    // - fill_user_operation() for filling missing fields
-    // - And many more aa-sdk-rs provider methods
-
-    // DEPRECATED METHODS REMOVED
-    // These methods were replaced with proper aa-sdk-rs SmartAccountProvider usage
-    // Use SmartAccountProvider::send_user_operation for submitting operations
-    // Use SmartAccountProvider::estimate_user_operation_gas for gas estimation
+    // Architecture: aa-sdk-rs SmartAccountProvider Integration
+    // This client now uses SmartAccountProvider for all bundler interactions.
+    // 
+    // Benefits of this approach:
+    // - Built-in gas estimation and field filling
+    // - Proper error handling and retry logic
+    // - Type-safe bundler operations
+    // - Full aa-sdk-rs ecosystem integration
+    //
+    // The BundlerClient now serves primarily as a factory for creating
+    // Alloy providers and handling contract address predictions.
 }
 
 // Helper function removed - now using Alloy provider methods

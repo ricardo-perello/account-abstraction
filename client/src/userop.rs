@@ -75,9 +75,8 @@ pub fn create_user_operation_request(account_call: AccountCall) -> UserOperation
 
 // Remove custom PackedUserOperation - use aa-sdk-rs types instead
 
-// Custom response types removed - aa-sdk-rs provides these through SmartAccountProvider
-// Use UserOpHash from aa-sdk-rs::types::request::UserOpHash 
-// Use UserOperationGasEstimation from aa-sdk-rs::types::UserOperationGasEstimation
+// Response types: We use aa-sdk-rs types directly for consistency
+// UserOpHash and UserOperationGasEstimation are re-exported for convenience
 
 // Re-export aa-sdk-rs types for responses
 pub use aa_sdk_rs::types::{

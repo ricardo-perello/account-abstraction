@@ -14,12 +14,13 @@ use userop::UserOperationBuilder;
 use bundler::BundlerClient;
 use wallet::{Wallet, WalletFactory};
 
-// aa-sdk-rs integration - imports ready for future provider implementation
-// Commented out until we fully implement SmartAccountProvider pattern
-// use aa_sdk_rs::{
-//     smart_account::SimpleAccount,
-//     provider::{SmartAccountProvider, SmartAccountProviderTrait},
-// };
+// aa-sdk-rs integration - using SmartAccountProvider properly
+use aa_sdk_rs::{
+    smart_account::SimpleAccount,
+    provider::{SmartAccountProvider, SmartAccountProviderTrait},
+};
+use alloy::providers::ProviderBuilder;
+use std::sync::Arc;
 
 #[derive(Parser)]
 #[command(name = "aa-client")]
@@ -320,11 +321,26 @@ async fn estimate_gas(
         Bytes::from_str(&format!("0x{}", call_data))?
     };
     
-    println!("Estimating gas for UserOperation using real bundler...");
+    println!("Creating SmartAccountProvider and SimpleAccount...");
     println!("Target: {}", target_addr);
-    println!("Sender: {}", wallet.address());
-    println!("Call Data: 0x{}", hex::encode(&call_data_bytes));
     println!("Entry Point: {}", entry_point_addr);
+    
+    // Create concrete provider type
+    let url = url::Url::parse(rpc_url)?;
+    let provider = ProviderBuilder::new().on_http(url);
+    
+    // Create SimpleAccount with proper factory address
+    let factory_addr = Address::from_str("0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512")?; // Default factory
+    let simple_account = SimpleAccount::new(
+        Arc::new(provider.clone()),
+        entry_point_addr,
+        factory_addr,
+        wallet.address(),
+        chain_id,
+    );
+    
+    // Create SmartAccountProvider
+    let smart_provider = SmartAccountProvider::new(provider, simple_account);
     
     // Create a UserOperation for gas estimation
     let user_op_request = UserOperationBuilder::new(
@@ -336,17 +352,10 @@ async fn estimate_gas(
     .with_nonce(U256::from(nonce))
     .build();
     
-    // Create bundler client for real gas estimation
-    let bundler_client = BundlerClient::new(
-        rpc_url.to_string(),
-        entry_point_addr,
-        U256::from(chain_id),
-    );
-    
-    // Get real gas estimation from bundler
-    match bundler_client.estimate_user_operation_gas(&user_op_request).await {
+    // Use SmartAccountProvider for gas estimation
+    match smart_provider.estimate_user_operation_gas(&user_op_request).await {
         Ok(gas_estimate) => {
-            println!("✅ Real gas estimation from bundler:");
+            println!("✅ Gas estimation from SmartAccountProvider:");
             println!("  Pre-verification gas: {}", gas_estimate.pre_verification_gas);
             println!("  Verification gas limit: {}", gas_estimate.verification_gas_limit);
             println!("  Call gas limit: {}", gas_estimate.call_gas_limit);
@@ -360,8 +369,7 @@ async fn estimate_gas(
     Ok(())
 }
 
-/// Submit a UserOperation to a bundler
-/// Updated to use aa-sdk-rs architecture
+/// Submit a UserOperation to a bundler using aa-sdk-rs SmartAccountProvider
 async fn submit_user_operation(
     private_key: &str,
     target: &str,
@@ -371,7 +379,7 @@ async fn submit_user_operation(
     entry_point: &str,
     chain_id: u64,
 ) -> Result<()> {
-    println!("Submitting UserOperation using aa-sdk-rs...");
+    println!("Submitting UserOperation using aa-sdk-rs SmartAccountProvider...");
     
     // Create wallet and parse parameters
     let wallet = Wallet::from_hex(private_key)?;
@@ -383,13 +391,28 @@ async fn submit_user_operation(
         Bytes::from_str(&format!("0x{}", call_data))?
     };
     
-    println!("Submitting UserOperation to real bundler...");
+    println!("Creating SmartAccountProvider and SimpleAccount...");
     println!("Target: {}", target_addr);
-    println!("Sender: {}", wallet.address());
-    println!("Call Data: 0x{}", hex::encode(&call_data_bytes));
     println!("Entry Point: {}", entry_point_addr);
     
-    // Create a real UserOperation using our builder
+    // Create concrete provider type  
+    let url = url::Url::parse(rpc_url)?;
+    let provider = ProviderBuilder::new().on_http(url);
+    
+    // Create SimpleAccount with proper factory address  
+    let factory_addr = Address::from_str("0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512")?; // Default factory
+    let simple_account = SimpleAccount::new(
+        Arc::new(provider.clone()),
+        entry_point_addr,
+        factory_addr,
+        wallet.address(),
+        chain_id,
+    );
+    
+    // Create SmartAccountProvider
+    let smart_provider = SmartAccountProvider::new(provider, simple_account);
+    
+    // Create a UserOperation using our builder
     let user_op_request = UserOperationBuilder::new(
         target_addr,
         U256::ZERO,
@@ -399,20 +422,13 @@ async fn submit_user_operation(
     .with_nonce(U256::from(nonce))
     .build();
     
-    // Create bundler client for real submission
-    let bundler_client = BundlerClient::new(
-        rpc_url.to_string(),
-        entry_point_addr,
-        U256::from(chain_id),
-    );
+    println!("Submitting to bundler via SmartAccountProvider...");
     
-    println!("Submitting to bundler: {}", bundler_client.rpc_url());
-    
-    // Submit to real bundler
-    match bundler_client.submit_user_operation(&user_op_request).await {
+    // Submit using SmartAccountProvider
+    match smart_provider.send_user_operation(user_op_request, wallet.signer()).await {
         Ok(user_op_hash) => {
             println!("✅ UserOperation submitted successfully!");
-            println!("UserOperation Hash: 0x{}", hex::encode(user_op_hash));
+            println!("UserOperation Hash: {:?}", user_op_hash);
             println!("You can track this transaction on the blockchain");
         }
         Err(e) => {
