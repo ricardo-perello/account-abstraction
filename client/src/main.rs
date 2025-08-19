@@ -48,11 +48,11 @@ enum Commands {
         rpc_url: String,
         
         /// Entry point contract address
-        #[arg(short, long)]
+        #[arg(short, long, default_value = "0x5FbDB2315678afecb367f032d93F642f64180aa3")]
         entry_point: String,
         
         /// Chain ID
-        #[arg(short, long, default_value = "1")]
+        #[arg(short, long, default_value = "31337")]
         chain_id: u64,
     },
     
@@ -79,11 +79,11 @@ enum Commands {
         rpc_url: String,
         
         /// Entry point contract address
-        #[arg(short, long)]
+        #[arg(short, long, default_value = "0x5FbDB2315678afecb367f032d93F642f64180aa3")]
         entry_point: String,
         
         /// Chain ID
-        #[arg(short, long, default_value = "1")]
+        #[arg(short, long, default_value = "31337")]
         chain_id: u64,
     },
     
@@ -110,11 +110,11 @@ enum Commands {
         rpc_url: String,
         
         /// Entry point contract address
-        #[arg(short, long)]
+        #[arg(short, long, default_value = "0x5FbDB2315678afecb367f032d93F642f64180aa3")]
         entry_point: String,
         
         /// Chain ID
-        #[arg(short, long, default_value = "1")]
+        #[arg(short, long, default_value = "31337")]
         chain_id: u64,
     },
     
@@ -125,7 +125,7 @@ enum Commands {
         private_key: String,
         
         /// Factory contract address
-        #[arg(short, long)]
+        #[arg(short, long, default_value = "0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512")]
         factory: String,
         
         /// Salt for deterministic deployment (hex string)
@@ -137,7 +137,7 @@ enum Commands {
         rpc_url: String,
         
         /// Chain ID
-        #[arg(short, long, default_value = "1")]
+        #[arg(short, long, default_value = "31337")]
         chain_id: u64,
     },
     
@@ -148,7 +148,7 @@ enum Commands {
         private_key: String,
         
         /// Factory contract address
-        #[arg(short, long)]
+        #[arg(short, long, default_value = "0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512")]
         factory: String,
         
         /// Comma-separated list of owner addresses
@@ -164,14 +164,14 @@ enum Commands {
         rpc_url: String,
         
         /// Chain ID
-        #[arg(short, long, default_value = "1")]
+        #[arg(short, long, default_value = "31337")]
         chain_id: u64,
     },
     
     /// Get predicted smart account address before deployment
     PredictAddress {
         /// Factory contract address
-        #[arg(short, long)]
+        #[arg(short, long, default_value = "0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512")]
         factory: String,
         
         /// Owner address
@@ -187,7 +187,7 @@ enum Commands {
         rpc_url: String,
         
         /// Chain ID
-        #[arg(short, long, default_value = "1")]
+        #[arg(short, long, default_value = "31337")]
         chain_id: u64,
     },
     
@@ -199,6 +199,13 @@ enum Commands {
         /// Private key in hex format
         #[arg(short, long)]
         private_key: String,
+    },
+    
+    /// Run guided demo with Anvil deployed contracts
+    Demo {
+        /// Skip confirmation prompts
+        #[arg(short, long)]
+        yes: bool,
     },
 }
 
@@ -230,6 +237,9 @@ async fn main() -> Result<()> {
         }
         Commands::Info { private_key } => {
             show_wallet_info(private_key)?;
+        }
+        Commands::Demo { yes } => {
+            run_guided_demo(*yes).await?;
         }
     }
 
@@ -523,9 +533,8 @@ async fn deploy_multi_owner_account(
     // Create the call data for createAccountWithOwners(owners[], salt)
     let mut call_data = Vec::new();
     
-    // Function selector for createAccountWithOwners(address[],uint256): 0x12345678
-    // Note: This is a placeholder - you'll need the actual function selector
-    call_data.extend_from_slice(&[0x12, 0x34, 0x56, 0x78]);
+    // Function selector for createAccountWithOwners(address[],bytes32): 0x9ba75321
+    call_data.extend_from_slice(&[0x9b, 0xa7, 0x53, 0x21]);
     
     // Encode owners array
     // Array offset (32 bytes) - points to where the array data starts
@@ -621,6 +630,119 @@ async fn predict_smart_account_address(
     // For now, show the call data that would be used
     println!("Address prediction call data ready");
     println!("Call factory.getAddress() with this data to get the predicted address");
+    
+    Ok(())
+}
+
+/// Run a guided demo with the deployed Anvil contracts
+async fn run_guided_demo(skip_prompts: bool) -> Result<()> {
+    use std::io::BufRead;
+    
+    println!("🚀 AA Client Demo with Anvil Deployed Contracts");
+    println!("================================================");
+    println!();
+    
+    // Anvil constants from DEPLOYMENT_INFO.md
+    let anvil_rpc = "http://localhost:8545";
+    let anvil_chain_id = 31337u64;
+    let entry_point = "0x5FbDB2315678afecb367f032d93F642f64180aa3";
+    let factory = "0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512";
+    
+    // Test account from Anvil (Owner1)
+    let test_private_key = "0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d";
+    let test_address = "0x70997970C51812dc3A010C7d01b50e0d17dc79C8";
+    
+    println!("📊 Network Information:");
+    println!("  RPC URL: {}", anvil_rpc);
+    println!("  Chain ID: {}", anvil_chain_id);
+    println!("  EntryPoint: {}", entry_point);
+    println!("  Factory: {}", factory);
+    println!();
+    
+    println!("🔑 Test Account:");
+    println!("  Address: {}", test_address);
+    println!("  Private Key: {}", test_private_key);
+    println!();
+    
+    if !skip_prompts {
+        println!("Press Enter to continue with the demo...");
+        let stdin = std::io::stdin();
+        let _ = stdin.lock().read_line(&mut String::new())?;
+    }
+    
+    // Step 1: Show wallet info
+    println!("📋 Step 1: Wallet Information");
+    println!("==============================");
+    show_wallet_info(test_private_key)?;
+    println!();
+    
+    if !skip_prompts {
+        println!("Press Enter to continue...");
+        let stdin = std::io::stdin();
+        let _ = stdin.lock().read_line(&mut String::new())?;
+    }
+    
+    // Step 2: Predict smart account address
+    println!("🔮 Step 2: Predict Smart Account Address");
+    println!("=========================================");
+    let salt = "0x123456";
+    predict_smart_account_address(factory, test_address, salt, anvil_rpc, anvil_chain_id).await?;
+    println!();
+    
+    if !skip_prompts {
+        println!("Press Enter to continue...");
+        let stdin = std::io::stdin();
+        let _ = stdin.lock().read_line(&mut String::new())?;
+    }
+    
+    // Step 3: Deploy single-owner smart account
+    println!("🏗️  Step 3: Deploy Single-Owner Smart Account");
+    println!("==============================================");
+    deploy_smart_account(test_private_key, factory, salt, anvil_rpc, anvil_chain_id).await?;
+    println!();
+    
+    if !skip_prompts {
+        println!("Press Enter to continue...");
+        let stdin = std::io::stdin();
+        let _ = stdin.lock().read_line(&mut String::new())?;
+    }
+    
+    // Step 4: Deploy multi-owner smart account
+    println!("👥 Step 4: Deploy Multi-Owner Smart Account");
+    println!("============================================");
+    let owners = format!("{},0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC", test_address);
+    let multi_salt = "0x654321";
+    deploy_multi_owner_account(test_private_key, factory, &owners, multi_salt, anvil_rpc, anvil_chain_id).await?;
+    println!();
+    
+    if !skip_prompts {
+        println!("Press Enter to continue...");
+        let stdin = std::io::stdin();
+        let _ = stdin.lock().read_line(&mut String::new())?;
+    }
+    
+    // Step 5: Create UserOperation
+    println!("⚡ Step 5: Create UserOperation");
+    println!("===============================");
+    let target = "0x0000000000000000000000000000000000000000"; // null address for demo
+    let call_data = "0x";
+    let nonce = 0u64;
+    create_user_operation(test_private_key, target, call_data, nonce, anvil_rpc, entry_point, anvil_chain_id).await?;
+    println!();
+    
+    println!("✅ Demo Complete!");
+    println!("================");
+    println!();
+    println!("🔧 To interact with the deployed contracts manually:");
+    println!("  1. Use the deployed addresses shown above");
+    println!("  2. Use test accounts from Anvil for transactions");
+    println!("  3. Check DEPLOYMENT_INFO.md for more examples");
+    println!();
+    println!("📚 Example commands:");
+    println!("  aa-client info -p {}", test_private_key);
+    println!("  aa-client predict-address -f {} -o {} -s {}", factory, test_address, salt);
+    println!("  aa-client deploy-account -p {} -s {}", test_private_key, salt);
+    println!();
     
     Ok(())
 }
