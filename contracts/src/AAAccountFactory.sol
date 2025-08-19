@@ -3,6 +3,7 @@ pragma solidity ^0.8.28;
 
 import "./AAAccount.sol";
 import "@openzeppelin/contracts/utils/Create2.sol";
+import "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 
 /**
  * @title AAAccountFactory
@@ -32,6 +33,38 @@ contract AAAccountFactory {
     }
     
     /**
+     * @dev Get the address where an account will be deployed
+     * @param owner The owner of the account
+     * @param salt Unique salt for CREATE2 deployment
+     * @return The predicted account address
+     */
+    function getAddress(address owner, bytes32 salt) public view returns (address) {
+        return Create2.computeAddress(bytes32(salt), keccak256(abi.encodePacked(
+            type(ERC1967Proxy).creationCode,
+            abi.encode(
+                address(accountImplementation),
+                abi.encodeCall(AAAccount.initialize, (owner))
+            )
+        )));
+    }
+    
+    /**
+     * @dev Get the address where a multi-owner account will be deployed
+     * @param owners Array of owner addresses
+     * @param salt Unique salt for CREATE2 deployment
+     * @return The predicted account address
+     */
+    function getAddressWithOwners(address[] calldata owners, bytes32 salt) public view returns (address) {
+        return Create2.computeAddress(bytes32(salt), keccak256(abi.encodePacked(
+            type(ERC1967Proxy).creationCode,
+            abi.encode(
+                address(accountImplementation),
+                abi.encodeCall(AAAccount.initializeWithOwners, (owners))
+            )
+        )));
+    }
+    
+    /**
      * @dev Create a new account with a single owner
      * @param owner The owner of the account
      * @param salt Unique salt for CREATE2 deployment
@@ -40,20 +73,17 @@ contract AAAccountFactory {
     function createAccount(address owner, bytes32 salt) external returns (AAAccount account) {
         require(owner != address(0), "AAAccountFactory: owner cannot be zero");
         
-        // Encode the constructor parameters
-        bytes memory initCode = abi.encodePacked(
+        address addr = getAddress(owner, salt);
+        uint256 codeSize = addr.code.length;
+        if (codeSize > 0) {
+            return AAAccount(payable(addr));
+        }
+        
+        // Deploy using CREATE2 with ERC1967Proxy
+        account = AAAccount(payable(new ERC1967Proxy{salt: salt}(
             address(accountImplementation),
-            abi.encodeWithSelector(AAAccount.initialize.selector, owner)
-        );
-        
-        // Deploy using CREATE2
-        address deployedAddress = Create2.deploy(
-            0, // amount of ETH to send
-            salt,
-            initCode
-        );
-        
-        account = AAAccount(payable(deployedAddress));
+            abi.encodeCall(AAAccount.initialize, (owner))
+        )));
         
         emit AccountCreated(address(account), owner, uint256(salt));
     }
@@ -77,66 +107,19 @@ contract AAAccountFactory {
             }
         }
         
-        // Encode the constructor parameters for multi-owner initialization
-        bytes memory initCode = abi.encodePacked(
+        address addr = getAddressWithOwners(owners, salt);
+        uint256 codeSize = addr.code.length;
+        if (codeSize > 0) {
+            return AAAccount(payable(addr));
+        }
+        
+        // Deploy using CREATE2 with ERC1967Proxy
+        account = AAAccount(payable(new ERC1967Proxy{salt: salt}(
             address(accountImplementation),
-            abi.encodeWithSelector(AAAccount.initializeWithOwners.selector, owners)
-        );
-        
-        // Deploy using CREATE2
-        address deployedAddress = Create2.deploy(
-            0, // amount of ETH to send
-            salt,
-            initCode
-        );
-        
-        account = AAAccount(payable(deployedAddress));
+            abi.encodeCall(AAAccount.initializeWithOwners, (owners))
+        )));
         
         emit AccountCreatedWithOwners(address(account), owners, uint256(salt));
-    }
-    
-    /**
-     * @dev Get the address where an account will be deployed
-     * @param owner The owner of the account
-     * @param salt Unique salt for CREATE2 deployment
-     * @return The predicted account address
-     */
-    function getAddress(address owner, bytes32 salt) external view returns (address) {
-        bytes memory initCode = abi.encodePacked(
-            address(accountImplementation),
-            abi.encodeWithSelector(AAAccount.initialize.selector, owner)
-        );
-        
-        bytes32 hash = keccak256(abi.encodePacked(
-            bytes1(0xff),
-            address(this),
-            salt,
-            keccak256(initCode)
-        ));
-        
-        return address(uint160(uint256(hash)));
-    }
-    
-    /**
-     * @dev Get the address where a multi-owner account will be deployed
-     * @param owners Array of owner addresses
-     * @param salt Unique salt for CREATE2 deployment
-     * @return The predicted account address
-     */
-    function getAddressWithOwners(address[] calldata owners, bytes32 salt) external view returns (address) {
-        bytes memory initCode = abi.encodePacked(
-            address(accountImplementation),
-            abi.encodeWithSelector(AAAccount.initializeWithOwners.selector, owners)
-        );
-        
-        bytes32 hash = keccak256(abi.encodePacked(
-            bytes1(0xff),
-            address(this),
-            salt,
-            keccak256(initCode)
-        ));
-        
-        return address(uint160(uint256(hash)));
     }
     
     /**
@@ -146,7 +129,7 @@ contract AAAccountFactory {
      * @return True if the account exists
      */
     function isAccountDeployed(address owner, bytes32 salt) external view returns (bool) {
-        address predictedAddress = this.getAddress(owner, salt);
+        address predictedAddress = getAddress(owner, salt);
         return predictedAddress.code.length > 0;
     }
     
@@ -157,7 +140,7 @@ contract AAAccountFactory {
      * @return True if the account exists
      */
     function isAccountWithOwnersDeployed(address[] calldata owners, bytes32 salt) external view returns (bool) {
-        address predictedAddress = this.getAddressWithOwners(owners, salt);
+        address predictedAddress = getAddressWithOwners(owners, salt);
         return predictedAddress.code.length > 0;
     }
 }
