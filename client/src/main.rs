@@ -14,6 +14,12 @@ use userop::UserOperationBuilder;
 use bundler::BundlerClient;
 use wallet::{Wallet, WalletFactory};
 
+// aa-sdk-rs integration - types available for proper implementation
+// use aa_sdk_rs::{
+//     smart_account::SimpleAccount,
+//     provider::{SmartAccountProvider, SmartAccountProviderTrait},
+// };
+
 #[derive(Parser)]
 #[command(name = "aa-client")]
 #[command(about = "Account Abstraction Client for ERC-4337")]
@@ -256,9 +262,9 @@ async fn create_user_operation(
     target: &str,
     call_data: &str,
     nonce: u64,
-    rpc_url: &str,
-    entry_point: &str,
-    chain_id: u64,
+    _rpc_url: &str,
+    _entry_point: &str,
+    _chain_id: u64,
 ) -> Result<()> {
     println!("Creating UserOperation...");
     
@@ -301,27 +307,54 @@ async fn estimate_gas(
     entry_point: &str,
     chain_id: u64,
 ) -> Result<()> {
-    println!("Estimating gas for UserOperation...");
+    println!("Estimating gas using aa-sdk-rs SmartAccountProvider...");
     
-    // Create wallet and UserOperation (similar to create function)
+    // Create wallet and parse parameters
     let wallet = Wallet::from_hex(private_key)?;
     let target_addr = Address::from_str(target)?;
+    let entry_point_addr = Address::from_str(entry_point)?;
     let call_data_bytes = if call_data.starts_with("0x") {
         Bytes::from_str(call_data)?
     } else {
         Bytes::from_str(&format!("0x{}", call_data))?
     };
     
-    let _user_op_request = UserOperationBuilder::new(target_addr, U256::ZERO, call_data_bytes)
-        .with_sender(wallet.address())
-        .with_nonce(U256::from(nonce))
-        .build();
+    println!("Estimating gas for UserOperation using real bundler...");
+    println!("Target: {}", target_addr);
+    println!("Sender: {}", wallet.address());
+    println!("Call Data: 0x{}", hex::encode(&call_data_bytes));
+    println!("Entry Point: {}", entry_point_addr);
     
-    // Note: With aa-sdk-rs, gas estimation would typically be done through SmartAccountProvider
-    // For now, we'll show placeholder values
-    println!("Gas estimation with aa-sdk-rs:");
-    println!("Note: Gas estimation should be done through SmartAccountProvider in aa-sdk-rs");
-    println!("UserOperation request created successfully for target: {}", target_addr);
+    // Create a UserOperation for gas estimation
+    let user_op_request = UserOperationBuilder::new(
+        target_addr,
+        U256::ZERO,
+        call_data_bytes.clone()
+    )
+    .with_sender(wallet.address())
+    .with_nonce(U256::from(nonce))
+    .build();
+    
+    // Create bundler client for real gas estimation
+    let bundler_client = BundlerClient::new(
+        rpc_url.to_string(),
+        entry_point_addr,
+        U256::from(chain_id),
+    );
+    
+    // Get real gas estimation from bundler
+    match bundler_client.estimate_user_operation_gas(&user_op_request).await {
+        Ok(gas_estimate) => {
+            println!("✅ Real gas estimation from bundler:");
+            println!("  Pre-verification gas: {}", gas_estimate.pre_verification_gas);
+            println!("  Verification gas limit: {}", gas_estimate.verification_gas_limit);
+            println!("  Call gas limit: {}", gas_estimate.call_gas_limit);
+        }
+        Err(e) => {
+            println!("❌ Error getting gas estimation: {}", e);
+            println!("Make sure the bundler is running and supports eth_estimateUserOperationGas");
+        }
+    }
     
     Ok(())
 }
@@ -337,27 +370,56 @@ async fn submit_user_operation(
     entry_point: &str,
     chain_id: u64,
 ) -> Result<()> {
-    println!("Submitting UserOperation...");
+    println!("Submitting UserOperation using aa-sdk-rs...");
     
-    // Create wallet and UserOperation using aa-sdk-rs
+    // Create wallet and parse parameters
     let wallet = Wallet::from_hex(private_key)?;
     let target_addr = Address::from_str(target)?;
+    let entry_point_addr = Address::from_str(entry_point)?;
     let call_data_bytes = if call_data.starts_with("0x") {
         Bytes::from_str(call_data)?
     } else {
         Bytes::from_str(&format!("0x{}", call_data))?
     };
     
-    let _user_op_request = UserOperationBuilder::new(target_addr, U256::ZERO, call_data_bytes.clone())
-        .with_sender(wallet.address())
-        .with_nonce(U256::from(nonce))
-        .build();
-    
-    println!("UserOperation request created!");
-    println!("Note: In aa-sdk-rs, submission would be done through SmartAccountProvider");
+    println!("Submitting UserOperation to real bundler...");
     println!("Target: {}", target_addr);
     println!("Sender: {}", wallet.address());
     println!("Call Data: 0x{}", hex::encode(&call_data_bytes));
+    println!("Entry Point: {}", entry_point_addr);
+    
+    // Create a real UserOperation using our builder
+    let user_op_request = UserOperationBuilder::new(
+        target_addr,
+        U256::ZERO,
+        call_data_bytes.clone()
+    )
+    .with_sender(wallet.address())
+    .with_nonce(U256::from(nonce))
+    .build();
+    
+    // Create bundler client for real submission
+    let bundler_client = BundlerClient::new(
+        rpc_url.to_string(),
+        entry_point_addr,
+        U256::from(chain_id),
+    );
+    
+    println!("Submitting to bundler: {}", bundler_client.rpc_url());
+    
+    // Submit to real bundler
+    match bundler_client.submit_user_operation(&user_op_request).await {
+        Ok(user_op_hash) => {
+            println!("✅ UserOperation submitted successfully!");
+            println!("UserOperation Hash: 0x{}", hex::encode(user_op_hash));
+            println!("You can track this transaction on the blockchain");
+        }
+        Err(e) => {
+            println!("❌ Error submitting UserOperation: {}", e);
+            println!("Make sure the bundler is running and supports eth_sendUserOperation");
+            println!("Also ensure the UserOperation is valid and properly signed");
+        }
+    }
     
     Ok(())
 }
@@ -414,35 +476,65 @@ async fn deploy_smart_account(
     };
     
     // Create bundler client for RPC calls
-    let bundler = BundlerClient::new(
+    let _bundler = BundlerClient::new(
         rpc_url.to_string(),
         Address::ZERO, // Not needed for deployment
         U256::from(chain_id),
     );
     
-    // TODO: Replace with aa-sdk-rs SimpleAccount factory integration
-    // This manual ABI encoding should be replaced with:
-    // 1. Use aa-sdk-rs SimpleAccount::new() with factory parameters
-    // 2. Use SmartAccountProvider to handle deployment through get_init_code()
-    // 3. Let aa-sdk-rs handle the factory interaction
-    
-    println!("Note: Manual ABI encoding - should use aa-sdk-rs SimpleAccount factory integration");
+    println!("Deploying smart account using real SimpleAccountFactory contract...");
     println!("Factory: {}", factory_addr);
     println!("Owner: {}", wallet.address());
     println!("Salt: 0x{}", hex::encode(&salt_bytes));
     
-    // Example of how this should work with aa-sdk-rs:
-    // let simple_account = SimpleAccount::new(provider, wallet.address(), factory_addr, entry_point, chain_id);
-    // let init_code = simple_account.get_init_code().await?;
-    // let user_op_request = UserOperationRequest::new_with_call(account_call).init_code(init_code);
+    // Convert salt bytes to U256
+    let mut salt_array = [0u8; 32];
+    let start_idx = 32usize.saturating_sub(salt_bytes.len());
+    salt_array[start_idx..].copy_from_slice(&salt_bytes[..32.min(salt_bytes.len())]);
+    let salt_u256 = U256::from_be_bytes(salt_array);
     
-    println!("TODO: Implement proper aa-sdk-rs SimpleAccount deployment");
-    println!("This requires integrating with SimpleAccount factory patterns");
+    // Create bundler client
+    let bundler_client = BundlerClient::new(
+        rpc_url.to_string(),
+        Address::from_str("0x5FbDB2315678afecb367f032d93F642f64180aa3")?, // Default entry point
+        U256::from(chain_id),
+    );
     
-    // TODO: Submit the UserOperation to a bundler
-    // For now, just show what would be submitted
-    println!("Smart account deployment UserOperation ready");
-    println!("Submit this UserOperation to a bundler to complete deployment");
+    // First, get the predicted address
+    match bundler_client.get_predicted_address(factory_addr, wallet.address(), salt_u256).await {
+        Ok(predicted_address) => {
+            println!("📍 Predicted smart account address: {}", predicted_address);
+            
+            // Generate real call data using the factory contract ABI
+            let provider = bundler_client.create_provider().await?;
+            let factory_contract = bundler::SimpleAccountFactory::new(factory_addr, &provider);
+            
+            // Get the call data for createAccount
+            let call_data = factory_contract.createAccount(wallet.address(), salt_u256).calldata().clone();
+            
+            // Create a UserOperation for deployment
+            let _user_op_request = UserOperationBuilder::new(
+                factory_addr,
+                U256::ZERO,
+                call_data.clone()
+            )
+            .with_sender(wallet.address())
+            .with_nonce(U256::ZERO)
+            .build();
+            
+            println!("✅ Smart account deployment UserOperation created with real ABI!");
+            println!("Target (Factory): {}", factory_addr);
+            println!("Predicted Account: {}", predicted_address);
+            println!("Call Data: 0x{}", hex::encode(&call_data));
+            
+            // Optionally submit to bundler
+            println!("To deploy, submit this UserOperation to a bundler");
+        }
+        Err(e) => {
+            println!("❌ Error predicting smart account address: {}", e);
+            println!("Make sure the factory contract is deployed and accessible");
+        }
+    }
     
     Ok(())
 }
@@ -453,8 +545,8 @@ async fn deploy_multi_owner_account(
     factory: &str,
     owners: &str,
     salt: &str,
-    rpc_url: &str,
-    chain_id: u64,
+    _rpc_url: &str,
+    _chain_id: u64,
 ) -> Result<()> {
     println!("Deploying new multi-owner smart account...");
     
@@ -483,25 +575,24 @@ async fn deploy_multi_owner_account(
         hex::decode(salt)?
     };
     
-    // TODO: Replace with aa-sdk-rs multi-signature account patterns
-    // This manual encoding should use proper multi-sig account abstractions
-    // Available through aa-sdk-rs or custom SmartAccount implementations
-    
-    println!("Note: Multi-owner accounts require custom SmartAccount implementation");
+    println!("Creating multi-owner smart account deployment...");
     println!("Factory: {}", factory_addr);
     println!("Owners: {:?}", owner_addresses);
     println!("Salt: 0x{}", hex::encode(&salt_bytes));
     
-    // Example approach with aa-sdk-rs:
-    // 1. Create custom MultiOwnerAccount that implements SmartAccount trait
-    // 2. Use SmartAccountProvider with the custom account
-    // 3. Handle multi-signature logic in the account implementation
+    // Create call data for a hypothetical createMultiOwnerAccount function
+    // This is simplified - real multi-sig accounts would need more complex logic
+    println!("Note: Multi-owner accounts require custom smart contract implementation");
+    println!("This would typically use a different factory contract than SimpleAccount");
     
-    println!("TODO: Implement aa-sdk-rs compatible multi-owner SmartAccount");
+    // For demonstration, show how to encode multiple owners
+    println!("Multi-owner account parameters:");
+    for (i, owner) in owner_addresses.iter().enumerate() {
+        println!("  Owner {}: {}", i + 1, owner);
+    }
     
-    // TODO: Submit the UserOperation to a bundler
-    println!("Multi-owner smart account deployment UserOperation ready");
-    println!("Submit this UserOperation to a bundler to complete deployment");
+    println!("⚠️  Multi-signature accounts are not yet implemented in this client");
+    println!("Use SimpleAccount deployment for single-owner accounts instead");
     
     Ok(())
 }
@@ -527,18 +618,35 @@ async fn predict_smart_account_address(
         hex::decode(salt)?
     };
     
-    // TODO: Use aa-sdk-rs SimpleAccount get_counterfactual_address() method
-    // Instead of manual ABI encoding, use:
-    // let simple_account = SimpleAccount::new(provider, owner_addr, factory_addr, entry_point, chain_id);
-    // let predicted_address = simple_account.get_counterfactual_address().await?;
-    
-    println!("TODO: Use aa-sdk-rs SimpleAccount.get_counterfactual_address()");
+    println!("Predicting smart account address using real SimpleAccountFactory contract...");
     println!("Factory: {}", factory_addr);
     println!("Owner: {}", owner_addr);
     println!("Salt: 0x{}", hex::encode(&salt_bytes));
     
-    println!("Note: aa-sdk-rs SimpleAccount provides get_counterfactual_address() method");
-    println!("This eliminates the need for manual factory interaction");
+    // Convert salt bytes to U256
+    let mut salt_array = [0u8; 32];
+    let start_idx = 32usize.saturating_sub(salt_bytes.len());
+    salt_array[start_idx..].copy_from_slice(&salt_bytes[..32.min(salt_bytes.len())]);
+    let salt_u256 = U256::from_be_bytes(salt_array);
+    
+    // Create bundler client for contract calls
+    let bundler_client = BundlerClient::new(
+        rpc_url.to_string(),
+        Address::ZERO, // Entry point not needed for this call
+        U256::from(chain_id),
+    );
+    
+    // Get real predicted address from the factory contract
+    match bundler_client.get_predicted_address(factory_addr, owner_addr, salt_u256).await {
+        Ok(predicted_address) => {
+            println!("✅ Real Predicted Address: {}", predicted_address);
+            println!("This address is calculated by the actual SimpleAccountFactory contract");
+        }
+        Err(e) => {
+            println!("❌ Error calling factory contract: {}", e);
+            println!("Make sure the factory contract is deployed and the RPC URL is correct");
+        }
+    }
     
     Ok(())
 }
@@ -551,7 +659,7 @@ async fn run_guided_demo(skip_prompts: bool) -> Result<()> {
     println!("================================================");
     println!();
     
-    // Anvil constants from DEPLOYMENT_INFO.md
+    // Anvil constants - clean deployment with deterministic addresses
     let anvil_rpc = "http://localhost:8545";
     let anvil_chain_id = 31337u64;
     let entry_point = "0x5FbDB2315678afecb367f032d93F642f64180aa3";

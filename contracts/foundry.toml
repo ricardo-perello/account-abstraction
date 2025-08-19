@@ -13,3 +13,9 @@ runs = 1000
 runs = 1000
 depth = 15
 fail_on_revert = false
+
+# Network configurations
+[rpc_endpoints]
+anvil = "http://localhost:8545"
+sepolia = "${ALCHEMY_HTTP_SEPOLIA}"
+

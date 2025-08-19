@@ -33,7 +33,7 @@ contract InteractScript is Script {
         
         // Create a single owner account
         console.log("\n--- Creating Single Owner Account ---");
-        bytes32 salt1 = keccak256("demo-salt-1");
+        uint256 salt1 = uint256(keccak256("demo-salt-1"));
         address predictedAddr1 = factory.getAddress(vm.addr(OWNER1_KEY), salt1);
         console.log("Predicted address:", predictedAddr1);
         
@@ -48,7 +48,7 @@ contract InteractScript is Script {
         owners[0] = vm.addr(OWNER1_KEY);
         owners[1] = vm.addr(OWNER2_KEY);
         
-        bytes32 salt2 = keccak256("demo-salt-2");
+        uint256 salt2 = uint256(keccak256("demo-salt-2"));
         address predictedAddr2 = factory.getAddressWithOwners(owners, salt2);
         console.log("Predicted address:", predictedAddr2);
         

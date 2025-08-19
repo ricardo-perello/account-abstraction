@@ -1,9 +1,8 @@
 // Refactored to use aa-sdk-rs types and functionality
 // This replaces the custom implementation with the proper SDK
 
-use alloy::primitives::{Address, Bytes, U256, B256};
+use alloy::primitives::{Address, Bytes, U256};
 use serde::{Deserialize, Serialize};
-use anyhow::Result;
 
 // Re-export aa-sdk-rs types for compatibility
 pub use aa_sdk_rs::types::{
@@ -83,14 +82,23 @@ pub use aa_sdk_rs::types::{
     UserOperationGasEstimation as GasEstimate,
 };
 
-/// Temporary compatibility wrapper for existing code
-/// TODO: Replace all usage with aa-sdk-rs types directly
+/// Legacy compatibility wrapper - prefer using aa-sdk-rs UserOpHash directly
+/// This is kept for backward compatibility with existing CLI output
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UserOperationResponse {
     /// The hash of the submitted UserOperation
     pub user_op_hash: String,
     /// Any error message if submission failed
     pub error: Option<String>,
+}
+
+impl From<UserOpHash> for UserOperationResponse {
+    fn from(hash: UserOpHash) -> Self {
+        Self {
+            user_op_hash: format!("{:?}", hash), // Convert hash to string representation
+            error: None,
+        }
+    }
 }
 
 #[cfg(test)]
@@ -109,7 +117,7 @@ mod tests {
             .with_nonce(U256::from(42))
             .with_gas_fees(U256::from(20000000000u64), U256::from(1000000000u64));
         
-        let request = builder.build();
+        let _request = builder.build();
         // Test passes if builder works without errors
     }
 
@@ -133,11 +141,13 @@ mod tests {
             pre_verification_gas: U256::from(50000u64),
             verification_gas_limit: U256::from(150000u64),
             call_gas_limit: U256::from(200000u64),
+            paymaster_verification_gas_limit: None,
         };
         
         assert_eq!(estimate.pre_verification_gas, U256::from(50000u64));
         assert_eq!(estimate.verification_gas_limit, U256::from(150000u64));
         assert_eq!(estimate.call_gas_limit, U256::from(200000u64));
+        assert_eq!(estimate.paymaster_verification_gas_limit, None);
     }
 
     #[test]

@@ -38,7 +38,7 @@ contract AAAccountFactory {
      * @param salt Unique salt for CREATE2 deployment
      * @return The predicted account address
      */
-    function getAddress(address owner, bytes32 salt) public view returns (address) {
+    function getAddress(address owner, uint256 salt) public view returns (address) {
         return Create2.computeAddress(bytes32(salt), keccak256(abi.encodePacked(
             type(ERC1967Proxy).creationCode,
             abi.encode(
@@ -54,7 +54,7 @@ contract AAAccountFactory {
      * @param salt Unique salt for CREATE2 deployment
      * @return The predicted account address
      */
-    function getAddressWithOwners(address[] calldata owners, bytes32 salt) public view returns (address) {
+    function getAddressWithOwners(address[] calldata owners, uint256 salt) public view returns (address) {
         return Create2.computeAddress(bytes32(salt), keccak256(abi.encodePacked(
             type(ERC1967Proxy).creationCode,
             abi.encode(
@@ -70,7 +70,7 @@ contract AAAccountFactory {
      * @param salt Unique salt for CREATE2 deployment
      * @return account The deployed account address
      */
-    function createAccount(address owner, bytes32 salt) external returns (AAAccount account) {
+    function createAccount(address owner, uint256 salt) external returns (AAAccount account) {
         require(owner != address(0), "AAAccountFactory: owner cannot be zero");
         
         address addr = getAddress(owner, salt);
@@ -80,12 +80,12 @@ contract AAAccountFactory {
         }
         
         // Deploy using CREATE2 with ERC1967Proxy
-        account = AAAccount(payable(new ERC1967Proxy{salt: salt}(
+        account = AAAccount(payable(new ERC1967Proxy{salt: bytes32(salt)}(
             address(accountImplementation),
             abi.encodeCall(AAAccount.initialize, (owner))
         )));
         
-        emit AccountCreated(address(account), owner, uint256(salt));
+        emit AccountCreated(address(account), owner, salt);
     }
     
     /**
@@ -94,7 +94,7 @@ contract AAAccountFactory {
      * @param salt Unique salt for CREATE2 deployment
      * @return account The deployed account address
      */
-    function createAccountWithOwners(address[] calldata owners, bytes32 salt) external returns (AAAccount account) {
+    function createAccountWithOwners(address[] calldata owners, uint256 salt) external returns (AAAccount account) {
         require(owners.length > 0, "AAAccountFactory: owners array cannot be empty");
         require(owners.length <= 10, "AAAccountFactory: too many owners (max 10)");
         
@@ -114,12 +114,12 @@ contract AAAccountFactory {
         }
         
         // Deploy using CREATE2 with ERC1967Proxy
-        account = AAAccount(payable(new ERC1967Proxy{salt: salt}(
+        account = AAAccount(payable(new ERC1967Proxy{salt: bytes32(salt)}(
             address(accountImplementation),
             abi.encodeCall(AAAccount.initializeWithOwners, (owners))
         )));
         
-        emit AccountCreatedWithOwners(address(account), owners, uint256(salt));
+        emit AccountCreatedWithOwners(address(account), owners, salt);
     }
     
     /**
@@ -128,7 +128,7 @@ contract AAAccountFactory {
      * @param salt Unique salt for CREATE2 deployment
      * @return True if the account exists
      */
-    function isAccountDeployed(address owner, bytes32 salt) external view returns (bool) {
+    function isAccountDeployed(address owner, uint256 salt) external view returns (bool) {
         address predictedAddress = getAddress(owner, salt);
         return predictedAddress.code.length > 0;
     }
@@ -139,7 +139,7 @@ contract AAAccountFactory {
      * @param salt Unique salt for CREATE2 deployment
      * @return True if the account exists
      */
-    function isAccountWithOwnersDeployed(address[] calldata owners, bytes32 salt) external view returns (bool) {
+    function isAccountWithOwnersDeployed(address[] calldata owners, uint256 salt) external view returns (bool) {
         address predictedAddress = getAddressWithOwners(owners, salt);
         return predictedAddress.code.length > 0;
     }

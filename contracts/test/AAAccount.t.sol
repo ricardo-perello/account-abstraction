@@ -35,7 +35,7 @@ contract AAAccountTest is Test {
     }
     
     function testCreateSingleOwnerAccount() public {
-        bytes32 salt = keccak256("test-salt-1");
+        uint256 salt = uint256(keccak256("test-salt-1"));
         
         // Create account with single owner
         AAAccount newAccount = factory.createAccount(owner1, salt);
@@ -54,7 +54,7 @@ contract AAAccountTest is Test {
         owners[0] = owner1;
         owners[1] = owner2;
         
-        bytes32 salt = keccak256("test-salt-2");
+        uint256 salt = uint256(keccak256("test-salt-2"));
         
         // Create account with multiple owners
         AAAccount newAccount = factory.createAccountWithOwners(owners, salt);
@@ -72,7 +72,7 @@ contract AAAccountTest is Test {
     
     function testAddOwner() public {
         // Create account
-        bytes32 salt = keccak256("test-salt-3");
+        uint256 salt = uint256(keccak256("test-salt-3"));
         AAAccount newAccount = factory.createAccount(owner1, salt);
         
         // Add new owner (owner1 should be able to add owner2)
@@ -91,7 +91,7 @@ contract AAAccountTest is Test {
         owners[0] = owner1;
         owners[1] = owner2;
         
-        bytes32 salt = keccak256("test-salt-4");
+        uint256 salt = uint256(keccak256("test-salt-4"));
         AAAccount newAccount = factory.createAccountWithOwners(owners, salt);
         
         // Remove owner2
@@ -108,7 +108,7 @@ contract AAAccountTest is Test {
     
     function testNonOwnerCannotAddOwner() public {
         // Create account with owner1
-        bytes32 salt = keccak256("test-salt-5");
+        uint256 salt = uint256(keccak256("test-salt-5"));
         AAAccount newAccount = factory.createAccount(owner1, salt);
         
         // Try to add owner2 from owner3 (should fail)
@@ -119,7 +119,7 @@ contract AAAccountTest is Test {
     
     function testNonOwnerCannotRemoveOwner() public {
         // Create account with owner1
-        bytes32 salt = keccak256("test-salt-6");
+        uint256 salt = uint256(keccak256("test-salt-6"));
         AAAccount newAccount = factory.createAccount(owner1, salt);
         
         // Try to remove owner1 from owner3 (should fail)
@@ -130,7 +130,7 @@ contract AAAccountTest is Test {
     
     function testCannotRemoveLastOwner() public {
         // Create account with single owner
-        bytes32 salt = keccak256("test-salt-7");
+        uint256 salt = uint256(keccak256("test-salt-7"));
         AAAccount newAccount = factory.createAccount(owner1, salt);
         
         // Try to remove the only owner (should fail with "cannot remove self")
@@ -140,7 +140,7 @@ contract AAAccountTest is Test {
     }
     
     function testGetAddress() public {
-        bytes32 salt = keccak256("test-salt-8");
+        uint256 salt = uint256(keccak256("test-salt-8"));
         address predictedAddress = factory.getAddress(owner1, salt);
         
         // Create account
@@ -151,7 +151,7 @@ contract AAAccountTest is Test {
     }
     
     function testEntryPoint() public {
-        bytes32 salt = keccak256("test-salt-9");
+        uint256 salt = uint256(keccak256("test-salt-9"));
         AAAccount newAccount = factory.createAccount(owner1, salt);
         
         // Verify entryPoint is set correctly
@@ -159,7 +159,7 @@ contract AAAccountTest is Test {
     }
     
     function testAccountInitialization() public {
-        bytes32 salt = keccak256("test-salt-10");
+        uint256 salt = uint256(keccak256("test-salt-10"));
         AAAccount newAccount = factory.createAccount(owner1, salt);
         
         // Verify account is initialized
