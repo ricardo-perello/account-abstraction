@@ -14,7 +14,8 @@ use userop::UserOperationBuilder;
 use bundler::BundlerClient;
 use wallet::{Wallet, WalletFactory};
 
-// aa-sdk-rs integration - types available for proper implementation
+// aa-sdk-rs integration - imports ready for future provider implementation
+// Commented out until we fully implement SmartAccountProvider pattern
 // use aa_sdk_rs::{
 //     smart_account::SimpleAccount,
 //     provider::{SmartAccountProvider, SmartAccountProviderTrait},
@@ -539,16 +540,16 @@ async fn deploy_smart_account(
     Ok(())
 }
 
-/// Deploy a new smart account with multiple owners
+/// Deploy a new smart account with multiple owners using AAAccountFactory
 async fn deploy_multi_owner_account(
     private_key: &str,
     factory: &str,
     owners: &str,
     salt: &str,
-    _rpc_url: &str,
-    _chain_id: u64,
+    rpc_url: &str,
+    chain_id: u64,
 ) -> Result<()> {
-    println!("Deploying new multi-owner smart account...");
+    println!("Deploying new multi-owner smart account using AAAccountFactory...");
     
     // Create wallet from private key
     let wallet = Wallet::from_hex(private_key)?;
@@ -556,7 +557,7 @@ async fn deploy_multi_owner_account(
     
     // Parse factory address
     let factory_addr = Address::from_str(factory)?;
-    println!("Factory contract: {}", factory_addr);
+    println!("AAAccountFactory contract: {}", factory_addr);
     
     // Parse owners list
     let owner_addresses: Vec<Address> = owners
@@ -566,7 +567,27 @@ async fn deploy_multi_owner_account(
         .map(|s| Address::from_str(s))
         .collect::<Result<Vec<_>, _>>()?;
     
-    println!("Owners: {:?}", owner_addresses);
+    // Validate owners
+    if owner_addresses.is_empty() {
+        return Err(anyhow::anyhow!("At least one owner is required"));
+    }
+    if owner_addresses.len() > 10 {
+        return Err(anyhow::anyhow!("Maximum 10 owners allowed"));
+    }
+    
+    // Check for duplicates
+    for i in 0..owner_addresses.len() {
+        for j in (i + 1)..owner_addresses.len() {
+            if owner_addresses[i] == owner_addresses[j] {
+                return Err(anyhow::anyhow!("Duplicate owner address: {}", owner_addresses[i]));
+            }
+        }
+    }
+    
+    println!("Owners ({}):", owner_addresses.len());
+    for (i, owner) in owner_addresses.iter().enumerate() {
+        println!("  Owner {}: {}", i + 1, owner);
+    }
     
     // Parse salt
     let salt_bytes = if salt.starts_with("0x") {
@@ -575,24 +596,70 @@ async fn deploy_multi_owner_account(
         hex::decode(salt)?
     };
     
-    println!("Creating multi-owner smart account deployment...");
-    println!("Factory: {}", factory_addr);
-    println!("Owners: {:?}", owner_addresses);
+    // Convert salt bytes to U256
+    let mut salt_array = [0u8; 32];
+    let start_idx = 32usize.saturating_sub(salt_bytes.len());
+    salt_array[start_idx..].copy_from_slice(&salt_bytes[..32.min(salt_bytes.len())]);
+    let salt_u256 = U256::from_be_bytes(salt_array);
+    
     println!("Salt: 0x{}", hex::encode(&salt_bytes));
     
-    // Create call data for a hypothetical createMultiOwnerAccount function
-    // This is simplified - real multi-sig accounts would need more complex logic
-    println!("Note: Multi-owner accounts require custom smart contract implementation");
-    println!("This would typically use a different factory contract than SimpleAccount");
+    // Create bundler client for contract interactions
+    let bundler_client = BundlerClient::new(
+        rpc_url.to_string(),
+        Address::from_str("0x5FbDB2315678afecb367f032d93F642f64180aa3")?, // Default entry point
+        U256::from(chain_id),
+    );
     
-    // For demonstration, show how to encode multiple owners
-    println!("Multi-owner account parameters:");
-    for (i, owner) in owner_addresses.iter().enumerate() {
-        println!("  Owner {}: {}", i + 1, owner);
+    // First, get the predicted address for multi-owner account
+    match bundler_client.get_predicted_multi_owner_address(factory_addr, owner_addresses.clone(), salt_u256).await {
+        Ok(predicted_address) => {
+            println!("📍 Predicted multi-owner account address: {}", predicted_address);
+            
+            // Generate call data for createAccountWithOwners
+            let provider = bundler_client.create_provider().await?;
+            let factory_contract = bundler::AAAccountFactory::new(factory_addr, &provider);
+            
+            // Get the call data for createAccountWithOwners
+            let call_data = factory_contract.createAccountWithOwners(owner_addresses.clone(), salt_u256).calldata().clone();
+            
+            // Create a UserOperation for multi-owner deployment
+            let _user_op_request = UserOperationBuilder::new(
+                factory_addr,
+                U256::ZERO,
+                call_data.clone()
+            )
+            .with_sender(wallet.address())
+            .with_nonce(U256::ZERO)
+            .build();
+            
+            println!("✅ Multi-owner account deployment UserOperation created!");
+            println!("Target (AAAccountFactory): {}", factory_addr);
+            println!("Predicted Account: {}", predicted_address);
+            println!("Call Data: 0x{}", hex::encode(&call_data));
+            println!("Owners: {} addresses", owner_addresses.len());
+            
+            // Show deployment instructions
+            println!();
+            println!("🚀 To deploy this multi-owner account:");
+            println!("1. Submit this UserOperation to a bundler");
+            println!("2. The account will be deployed with all {} owners having equal control", owner_addresses.len());
+            println!("3. Any owner can sign UserOperations for this account");
+            println!("4. Owners can add/remove other owners after deployment");
+            
+            println!();
+            println!("💡 Multi-owner features:");
+            println!("- Any owner can execute transactions");
+            println!("- Owners can add new owners (up to 10 total)");
+            println!("- Owners can remove other owners (but not themselves)");
+            println!("- Cannot remove the last owner");
+        }
+        Err(e) => {
+            println!("❌ Error predicting multi-owner account address: {}", e);
+            println!("Make sure the AAAccountFactory contract is deployed and accessible");
+            println!("The factory should support createAccountWithOwners function");
+        }
     }
-    
-    println!("⚠️  Multi-signature accounts are not yet implemented in this client");
-    println!("Use SimpleAccount deployment for single-owner accounts instead");
     
     Ok(())
 }
@@ -725,10 +792,13 @@ async fn run_guided_demo(skip_prompts: bool) -> Result<()> {
     }
     
     // Step 4: Deploy multi-owner smart account
-    println!("👥 Step 4: Deploy Multi-Owner Smart Account");
-    println!("============================================");
+    println!("👥 Step 4: Deploy Multi-Owner Smart Account (AAAccount)");
+    println!("========================================================");
+    println!("Note: This requires AAAccountFactory (not SimpleAccountFactory)");
     let owners = format!("{},0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC", test_address);
     let multi_salt = "0x654321";
+    // For demo purposes, we'll show what would happen with the proper factory
+    println!("Demo with AAAccountFactory deployment:");
     deploy_multi_owner_account(test_private_key, factory, &owners, multi_salt, anvil_rpc, anvil_chain_id).await?;
     println!();
     

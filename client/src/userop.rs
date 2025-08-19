@@ -6,14 +6,13 @@ use serde::{Deserialize, Serialize};
 
 // Re-export aa-sdk-rs types for compatibility
 pub use aa_sdk_rs::types::{
-    UserOperation as SdkUserOperation,
     UserOperationRequest, 
     AccountCall, 
     ExecuteCall
 };
 
-// Use aa-sdk-rs UserOperation directly instead of custom implementation
-pub type UserOperation = SdkUserOperation;
+// Note: UserOperation type alias removed to eliminate unused warning
+// Use aa_sdk_rs::types::UserOperation directly where needed
 
 /// Helper struct for creating user operations with a builder pattern
 /// This provides backward compatibility with existing code
@@ -37,7 +36,8 @@ impl UserOperationBuilder {
         self
     }
 
-    /// Set gas fees
+    /// Set gas fees (currently used in tests)
+    #[allow(dead_code)]
     pub fn with_gas_fees(mut self, max_fee_per_gas: U256, max_priority_fee_per_gas: U256) -> Self {
         self.request = self.request
             .max_fee_per_gas(max_fee_per_gas)
@@ -57,15 +57,18 @@ impl UserOperationBuilder {
     }
 }
 
-/// Helper functions for backward compatibility
+/// Helper functions for backward compatibility (used in tests)
+#[allow(dead_code)]
 pub fn create_execute_call(target: Address, value: U256, data: Bytes) -> ExecuteCall {
     ExecuteCall::new(target, value, data)
 }
 
+#[allow(dead_code)]
 pub fn create_account_call(execute_call: ExecuteCall) -> AccountCall {
     AccountCall::Execute(execute_call)
 }
 
+#[allow(dead_code)]
 pub fn create_user_operation_request(account_call: AccountCall) -> UserOperationRequest {
     UserOperationRequest::new_with_call(account_call)
 }
@@ -79,8 +82,12 @@ pub fn create_user_operation_request(account_call: AccountCall) -> UserOperation
 // Re-export aa-sdk-rs types for responses
 pub use aa_sdk_rs::types::{
     request::UserOpHash,
-    UserOperationGasEstimation as GasEstimate,
+    UserOperationGasEstimation,
 };
+
+// Legacy alias for backward compatibility (used in lib.rs re-exports)
+#[allow(dead_code)]
+pub type GasEstimate = UserOperationGasEstimation;
 
 /// Legacy compatibility wrapper - prefer using aa-sdk-rs UserOpHash directly
 /// This is kept for backward compatibility with existing CLI output

@@ -8,4 +8,5 @@ pub use bundler::BundlerClient;
 pub use wallet::{Wallet, WalletFactory};
 
 // Re-export aa-sdk-rs types for convenience
-pub use userop::{UserOperation, UserOperationRequest, ExecuteCall, AccountCall};
+pub use userop::{UserOperationRequest, ExecuteCall, AccountCall};
+// Note: UserOperation type is now aa_sdk_rs::types::UserOperation - use directly from aa-sdk-rs

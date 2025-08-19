@@ -42,6 +42,63 @@ sol!(
     ]"#
 );
 
+// AAAccountFactory ABI for multi-owner support
+sol!(
+    #[allow(missing_docs)]
+    #[sol(rpc)]
+    AAAccountFactory,
+    r#"[
+        {
+            "inputs": [
+                {"internalType": "address", "name": "owner", "type": "address"},
+                {"internalType": "uint256", "name": "salt", "type": "uint256"}
+            ],
+            "name": "createAccount",
+            "outputs": [
+                {"internalType": "contract AAAccount", "name": "account", "type": "address"}
+            ],
+            "stateMutability": "nonpayable",
+            "type": "function"
+        },
+        {
+            "inputs": [
+                {"internalType": "address[]", "name": "owners", "type": "address[]"},
+                {"internalType": "uint256", "name": "salt", "type": "uint256"}
+            ],
+            "name": "createAccountWithOwners",
+            "outputs": [
+                {"internalType": "contract AAAccount", "name": "account", "type": "address"}
+            ],
+            "stateMutability": "nonpayable",
+            "type": "function"
+        },
+        {
+            "inputs": [
+                {"internalType": "address", "name": "owner", "type": "address"},
+                {"internalType": "uint256", "name": "salt", "type": "uint256"}
+            ],
+            "name": "getAddress",
+            "outputs": [
+                {"internalType": "address", "name": "", "type": "address"}
+            ],
+            "stateMutability": "view",
+            "type": "function"
+        },
+        {
+            "inputs": [
+                {"internalType": "address[]", "name": "owners", "type": "address[]"},
+                {"internalType": "uint256", "name": "salt", "type": "uint256"}
+            ],
+            "name": "getAddressWithOwners",
+            "outputs": [
+                {"internalType": "address", "name": "", "type": "address"}
+            ],
+            "stateMutability": "view",
+            "type": "function"
+        }
+    ]"#
+);
+
 // Real bundler JSON-RPC request/response types
 #[derive(Debug, Clone, Serialize)]
 pub struct JsonRpcRequest {
@@ -53,7 +110,9 @@ pub struct JsonRpcRequest {
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct JsonRpcResponse<T> {
+    #[allow(dead_code)]
     pub jsonrpc: String,
+    #[allow(dead_code)]
     pub id: u64,
     pub result: Option<T>,
     pub error: Option<JsonRpcError>,
@@ -63,17 +122,19 @@ pub struct JsonRpcResponse<T> {
 pub struct JsonRpcError {
     pub code: i32,
     pub message: String,
+    #[allow(dead_code)]
     pub data: Option<serde_json::Value>,
 }
 
-// Keep compatibility types for existing API
-use crate::userop::{UserOperationResponse, GasEstimate};
+// Note: Compatibility types moved to aa-sdk-rs
+// UserOperationResponse and GasEstimate are re-exported from userop module when needed
 
 /// Modern bundler client wrapper that can create aa-sdk-rs providers
 /// This provides compatibility while enabling use of aa-sdk-rs functionality
 pub struct BundlerClient {
     rpc_url: String,
     entry_point: Address,
+    #[allow(dead_code)]
     chain_id: U256,
 }
 
@@ -95,11 +156,13 @@ impl BundlerClient {
     }
 
     /// Get the entry point address
+    #[allow(dead_code)]
     pub fn entry_point(&self) -> Address {
         self.entry_point
     }
 
     /// Get the chain ID
+    #[allow(dead_code)]
     pub fn chain_id(&self) -> U256 {
         self.chain_id
     }
@@ -117,6 +180,15 @@ impl BundlerClient {
         let factory_contract = SimpleAccountFactory::new(factory_address, &provider);
         
         let result = factory_contract.getAddress(owner, salt).call().await?;
+        Ok(result._0)
+    }
+
+    /// Get predicted address for multi-owner account from AAAccountFactory contract
+    pub async fn get_predicted_multi_owner_address(&self, factory_address: Address, owners: Vec<Address>, salt: U256) -> Result<Address> {
+        let provider = self.create_provider().await?;
+        let factory_contract = AAAccountFactory::new(factory_address, &provider);
+        
+        let result = factory_contract.getAddressWithOwners(owners, salt).call().await?;
         Ok(result._0)
     }
 
@@ -273,43 +345,10 @@ impl BundlerClient {
     // - fill_user_operation() for filling missing fields
     // - And many more aa-sdk-rs provider methods
 
-    /// DEPRECATED: Use SmartAccountProvider::send_user_operation instead
-    /// This is kept for backward compatibility
-    pub async fn submit_user_operation_legacy(
-        &self,
-        _user_op: &crate::userop::UserOperation,
-    ) -> Result<UserOperationResponse> {
-        Err(anyhow::anyhow!(
-            "This method is deprecated. Use aa-sdk-rs SmartAccountProvider::send_user_operation instead. \
-            Call create_provider() to get an Alloy provider, then wrap it with a SmartAccount."
-        ))
-    }
-
-    /// DEPRECATED: Use SmartAccountProvider::estimate_user_operation_gas instead
-    /// This is kept for backward compatibility
-    pub async fn estimate_user_operation_gas_legacy(
-        &self,
-        _user_op: &crate::userop::UserOperation,
-    ) -> Result<GasEstimate> {
-        Err(anyhow::anyhow!(
-            "This method is deprecated. Use aa-sdk-rs SmartAccountProvider::estimate_user_operation_gas instead. \
-            Call create_provider() to get an Alloy provider, then wrap it with a SmartAccount."
-        ))
-    }
-
-    /// Get the current nonce for an account using Alloy provider
-    pub async fn get_nonce(&self, account: Address) -> Result<U256> {
-        let provider = self.create_provider().await?;
-        let nonce = provider.get_transaction_count(account).await?;
-        Ok(U256::from(nonce))
-    }
-
-    /// Get the current gas price using Alloy provider
-    pub async fn get_gas_price(&self) -> Result<U256> {
-        let provider = self.create_provider().await?;
-        let gas_price = provider.get_gas_price().await?;
-        Ok(U256::from(gas_price))
-    }
+    // DEPRECATED METHODS REMOVED
+    // These methods were replaced with proper aa-sdk-rs SmartAccountProvider usage
+    // Use SmartAccountProvider::send_user_operation for submitting operations
+    // Use SmartAccountProvider::estimate_user_operation_gas for gas estimation
 }
 
 // Helper function removed - now using Alloy provider methods

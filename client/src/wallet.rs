@@ -46,22 +46,26 @@ impl Wallet {
     }
 
     /// Get a reference to the inner LocalSigner for use with aa-sdk-rs
+    #[allow(dead_code)]
     pub fn signer(&self) -> &LocalSigner<SigningKey> {
         &self.signer
     }
 
     /// Sign a message hash using aa-sdk-rs SmartAccountSigner trait
+    #[allow(dead_code)]
     pub async fn sign(&self, message_hash: B256) -> Result<Bytes> {
         self.signer.sign_hash_data(&message_hash).await
             .map_err(|e| anyhow::anyhow!("Signing error: {}", e))
     }
 
     /// Sign a UserOperation hash using aa-sdk-rs
+    #[allow(dead_code)]
     pub async fn sign_user_operation(&self, user_op_hash: B256) -> Result<Bytes> {
         self.sign(user_op_hash).await
     }
 
     /// Sign a message using aa-sdk-rs (with EIP-191 prefix)
+    #[allow(dead_code)]
     pub async fn sign_message<S: Send + Sync + AsRef<[u8]>>(&self, message: S) -> Result<Bytes> {
         self.signer.sign_message(message).await
             .map_err(|e| anyhow::anyhow!("Message signing error: {}", e))
@@ -94,6 +98,7 @@ impl WalletFactory {
 
     /// Create a wallet from a mnemonic phrase using proper derivation
     /// Note: For full BIP39 support, consider using dedicated crate like 'bip39'
+    #[allow(dead_code)]
     pub fn from_mnemonic(mnemonic: &str) -> Result<Wallet> {
         // Use alloy's ECDSA key derivation for better compatibility
         // This is still simplified - for production use proper BIP39 library
