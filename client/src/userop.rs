@@ -73,21 +73,24 @@ pub fn create_user_operation_request(account_call: AccountCall) -> UserOperation
 
 // Remove custom PackedUserOperation - use aa-sdk-rs types instead
 
-/// Response from bundler when submitting a UserOperation
+// Custom response types removed - aa-sdk-rs provides these through SmartAccountProvider
+// Use UserOpHash from aa-sdk-rs::types::request::UserOpHash 
+// Use UserOperationGasEstimation from aa-sdk-rs::types::UserOperationGasEstimation
+
+// Re-export aa-sdk-rs types for responses
+pub use aa_sdk_rs::types::{
+    request::UserOpHash,
+    UserOperationGasEstimation as GasEstimate,
+};
+
+/// Temporary compatibility wrapper for existing code
+/// TODO: Replace all usage with aa-sdk-rs types directly
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UserOperationResponse {
     /// The hash of the submitted UserOperation
     pub user_op_hash: String,
     /// Any error message if submission failed
     pub error: Option<String>,
-}
-
-/// Gas estimation response
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct GasEstimate {
-    pub pre_verification_gas: U256,
-    pub verification_gas_limit: U256,
-    pub call_gas_limit: U256,
 }
 
 #[cfg(test)]

@@ -24,24 +24,20 @@ impl Wallet {
         Ok(Self { signer })
     }
 
-    /// Create a wallet from a hex string private key
+    /// Create a wallet from a hex string private key using alloy hex parsing
     pub fn from_hex(private_key_hex: &str) -> Result<Self> {
+        // Use alloy's hex parsing instead of custom implementation
         let private_key_hex = private_key_hex.strip_prefix("0x").unwrap_or(private_key_hex);
-        if private_key_hex.len() != 64 {
-            return Err(anyhow::anyhow!("Private key must be 32 bytes (64 hex chars)"));
+        let bytes = hex::decode(private_key_hex)
+            .map_err(|e| anyhow::anyhow!("Invalid hex string: {}", e))?;
+        
+        if bytes.len() != 32 {
+            return Err(anyhow::anyhow!("Private key must be 32 bytes, got {}", bytes.len()));
         }
-
+        
         let mut private_key = [0u8; 32];
-        for (i, chunk) in private_key_hex.as_bytes().chunks(2).enumerate() {
-            if i >= 32 {
-                break;
-            }
-            let hex_byte = std::str::from_utf8(chunk)
-                .map_err(|_| anyhow::anyhow!("Invalid hex string"))?;
-            private_key[i] = u8::from_str_radix(hex_byte, 16)
-                .map_err(|_| anyhow::anyhow!("Invalid hex string"))?;
-        }
-
+        private_key.copy_from_slice(&bytes);
+        
         Self::new(private_key)
     }
 
