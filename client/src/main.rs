@@ -383,11 +383,8 @@ fn show_wallet_info(private_key: &str) -> Result<()> {
     println!("Address: {}", wallet.address());
     println!("Private Key: {}", wallet.export_private_key());
     
-    // Try to get public key
-    match wallet.public_key() {
-        Ok(pub_key) => println!("Public Key: 0x{}", hex::encode(pub_key)),
-        Err(e) => println!("Could not derive public key: {}", e),
-    }
+    // Note: Public key derivation now handled internally by aa-sdk-rs LocalSigner
+    println!("Note: Public key is managed internally by aa-sdk-rs LocalSigner");
     
     Ok(())
 }
