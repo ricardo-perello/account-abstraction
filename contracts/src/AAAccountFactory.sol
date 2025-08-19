@@ -3,7 +3,6 @@ pragma solidity ^0.8.28;
 
 import "./AAAccount.sol";
 import "@openzeppelin/contracts/utils/Create2.sol";
-import "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 
 /**
  * @title AAAccountFactory
@@ -13,9 +12,6 @@ import "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 contract AAAccountFactory {
     // EntryPoint contract address
     IEntryPoint public immutable entryPoint;
-    
-    // Template account for CREATE2 deployment
-    AAAccount public immutable accountImplementation;
     
     // Events
     event AccountCreated(address indexed account, address indexed owner, uint256 salt);
@@ -27,9 +23,6 @@ contract AAAccountFactory {
      */
     constructor(IEntryPoint _entryPoint) {
         entryPoint = _entryPoint;
-        
-        // Deploy the implementation contract
-        accountImplementation = new AAAccount(_entryPoint, address(0));
     }
     
     /**
@@ -40,11 +33,8 @@ contract AAAccountFactory {
      */
     function getAddress(address owner, uint256 salt) public view returns (address) {
         return Create2.computeAddress(bytes32(salt), keccak256(abi.encodePacked(
-            type(ERC1967Proxy).creationCode,
-            abi.encode(
-                address(accountImplementation),
-                abi.encodeCall(AAAccount.initialize, (owner))
-            )
+            type(AAAccount).creationCode,
+            abi.encode(entryPoint, owner)
         )));
     }
     
@@ -55,12 +45,11 @@ contract AAAccountFactory {
      * @return The predicted account address
      */
     function getAddressWithOwners(address[] calldata owners, uint256 salt) public view returns (address) {
-        return Create2.computeAddress(bytes32(salt), keccak256(abi.encodePacked(
-            type(ERC1967Proxy).creationCode,
-            abi.encode(
-                address(accountImplementation),
-                abi.encodeCall(AAAccount.initializeWithOwners, (owners))
-            )
+        // Use the same salt modification as in deployment
+        bytes32 actualSalt = keccak256(abi.encodePacked(salt, owners));
+        return Create2.computeAddress(actualSalt, keccak256(abi.encodePacked(
+            type(AAAccount).creationCode,
+            abi.encode(entryPoint, address(0)) // Pass zero address, will use initializeWithOwners
         )));
     }
     
@@ -79,11 +68,8 @@ contract AAAccountFactory {
             return AAAccount(payable(addr));
         }
         
-        // Deploy using CREATE2 with ERC1967Proxy
-        account = AAAccount(payable(new ERC1967Proxy{salt: bytes32(salt)}(
-            address(accountImplementation),
-            abi.encodeCall(AAAccount.initialize, (owner))
-        )));
+        // Deploy using CREATE2 directly
+        account = new AAAccount{salt: bytes32(salt)}(entryPoint, owner);
         
         emit AccountCreated(address(account), owner, salt);
     }
@@ -113,11 +99,10 @@ contract AAAccountFactory {
             return AAAccount(payable(addr));
         }
         
-        // Deploy using CREATE2 with ERC1967Proxy
-        account = AAAccount(payable(new ERC1967Proxy{salt: bytes32(salt)}(
-            address(accountImplementation),
-            abi.encodeCall(AAAccount.initializeWithOwners, (owners))
-        )));
+        // Deploy using CREATE2 directly, then initialize with multiple owners
+        bytes32 actualSalt = keccak256(abi.encodePacked(salt, owners));
+        account = new AAAccount{salt: actualSalt}(entryPoint, address(0));
+        account.initializeWithOwners(owners);
         
         emit AccountCreatedWithOwners(address(account), owners, salt);
     }

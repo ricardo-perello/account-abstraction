@@ -2,19 +2,20 @@
 pragma solidity ^0.8.28;
 
 import "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
+import "@openzeppelin/contracts/utils/cryptography/MessageHashUtils.sol";
+import "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
 import "@account-abstraction/contracts/core/BaseAccount.sol";
 import "@account-abstraction/contracts/core/Helpers.sol";
 
 contract AAAccount is BaseAccount {
     using ECDSA for bytes32;
+    using EnumerableSet for EnumerableSet.AddressSet;
 
-    // Owner management
+    // Owner management using EnumerableSet for gas efficiency
     mapping(address => bool) public owners;
-    address[] public ownerList;
-    uint256 public ownerCount;
+    EnumerableSet.AddressSet private _ownerSet;
     
-    // Nonce management for replay protection
-    mapping(uint192 => uint256) public nonces;
+
     
     // Events
     event OwnerAdded(address indexed owner);
@@ -63,11 +64,9 @@ contract AAAccount is BaseAccount {
             require(!owners[initialOwners[i]], "AAAccount: duplicate owner");
             
             owners[initialOwners[i]] = true;
-            ownerList.push(initialOwners[i]);
+            _ownerSet.add(initialOwners[i]);
             emit OwnerAdded(initialOwners[i]);
         }
-        
-        ownerCount = initialOwners.length;
         emit AccountInitialized(initialOwners[0]);
     }
 
@@ -77,8 +76,7 @@ contract AAAccount is BaseAccount {
      */
     function _initialize(address owner) private {
         owners[owner] = true;
-        ownerList.push(owner);
-        ownerCount = 1;
+        _ownerSet.add(owner);
         emit OwnerAdded(owner);
         emit AccountInitialized(owner);
     }
@@ -94,8 +92,7 @@ contract AAAccount is BaseAccount {
         require(!owners[newOwner], "AAAccount: owner already exists");
         
         owners[newOwner] = true;
-        ownerList.push(newOwner);
-        ownerCount++;
+        _ownerSet.add(newOwner);
         
         emit OwnerAdded(newOwner);
     }
@@ -104,39 +101,28 @@ contract AAAccount is BaseAccount {
         require(owners[msg.sender], "AAAccount: caller is not an owner");
         require(ownerToRemove != msg.sender, "AAAccount: cannot remove self");
         require(owners[ownerToRemove], "AAAccount: owner does not exist");
-        require(ownerCount > 1, "AAAccount: cannot remove last owner");
+        require(_ownerSet.length() > 1, "AAAccount: cannot remove last owner");
         
         owners[ownerToRemove] = false;
-        ownerCount--;
-        
-        // Remove from ownerList array
-        for (uint256 i = 0; i < ownerList.length; i++) {
-            if (ownerList[i] == ownerToRemove) {
-                ownerList[i] = ownerList[ownerList.length - 1];
-                ownerList.pop();
-                break;
-            }
-        }
+        _ownerSet.remove(ownerToRemove);
         
         emit OwnerRemoved(ownerToRemove);
     }
     
     function getOwners() external view returns (address[] memory) {
-        address[] memory activeOwners = new address[](ownerCount);
-        uint256 activeIndex = 0;
-        
-        for (uint256 i = 0; i < ownerList.length; i++) {
-            if (owners[ownerList[i]]) {
-                activeOwners[activeIndex] = ownerList[i];
-                activeIndex++;
-            }
-        }
-        
-        return activeOwners;
+        return _ownerSet.values();
     }
     
     function isOwner(address account) external view returns (bool) {
         return owners[account];
+    }
+    
+    function ownerCount() external view returns (uint256) {
+        return _ownerSet.length();
+    }
+    
+    function ownerList(uint256 index) external view returns (address) {
+        return _ownerSet.at(index);
     }
 
     function _requireForExecute() internal view override {
@@ -150,31 +136,16 @@ contract AAAccount is BaseAccount {
         PackedUserOperation calldata userOp,
         bytes32 userOpHash
     ) internal override returns (uint256 validationData) {
-        // Check if signature length is valid (65 bytes: r, s, v)
-        if (userOp.signature.length != 65) {
+        // Create EIP-191 signed message hash
+        bytes32 hash = MessageHashUtils.toEthSignedMessageHash(userOpHash);
+        
+        // Use ECDSA.tryRecover for safe signature recovery
+        (address signer, ECDSA.RecoverError error,) = ECDSA.tryRecover(hash, userOp.signature);
+        
+        // Check for recovery errors
+        if (error != ECDSA.RecoverError.NoError) {
             return SIG_VALIDATION_FAILED;
         }
-        
-        // Extract r, s, v from signature using memory
-        bytes memory sig = userOp.signature;
-        bytes32 r;
-        bytes32 s;
-        uint8 v;
-        
-        assembly {
-            r := mload(add(sig, 32))
-            s := mload(add(sig, 64))
-            v := byte(0, mload(add(sig, 96)))
-        }
-        
-        // Ensure v is valid (27 or 28)
-        if (v < 27) v += 27;
-        if (v != 27 && v != 28) {
-            return SIG_VALIDATION_FAILED;
-        }
-        
-        // Recover signer address
-        address signer = ecrecover(userOpHash, v, r, s);
         
         // Check if signer is an authorized owner
         if (!owners[signer]) {
@@ -184,33 +155,25 @@ contract AAAccount is BaseAccount {
         return SIG_VALIDATION_SUCCESS;
     }
 
-    // Override _validateNonce to implement custom nonce validation
-    function _validateNonce(uint256 nonce) internal view override {
-        // Verify nonce hasn't been used
-        require(nonces[uint192(nonce)] == 0, "AAAccount: nonce already used");
-    }
+    // Let EntryPoint handle nonce validation - no custom override needed
 
-    // Override validateUserOp to mark nonce as used after validation
-    function validateUserOp(
-        PackedUserOperation calldata userOp,
-        bytes32 userOpHash,
-        uint256 missingAccountFunds
-    ) external override returns (uint256 validationData) {
-        _requireFromEntryPoint();
+    /**
+     * @dev EIP-1271 signature validation
+     * @param hash The hash that was signed
+     * @param signature The signature to validate
+     * @return magicValue EIP-1271 magic value if valid, 0 otherwise
+     */
+    function isValidSignature(bytes32 hash, bytes calldata signature) external view returns (bytes4 magicValue) {
+        // Use ECDSA.tryRecover for safe signature recovery
+        (address signer, ECDSA.RecoverError error,) = ECDSA.tryRecover(hash, signature);
         
-        // Validate signature and nonce first
-        validationData = _validateSignature(userOp, userOpHash);
-        _validateNonce(userOp.nonce);
+        // Check for recovery errors or if signer is not an owner
+        if (error != ECDSA.RecoverError.NoError || !owners[signer]) {
+            return 0x00000000; // Invalid signature
+        }
         
-        // Mark nonce as used after successful validation
-        nonces[uint192(userOp.nonce)] = 1;
-        
-        _payPrefund(missingAccountFunds);
-    }
-
-    // Nonce getter for external access
-    function getNonce(uint192 key) external view returns (uint256) {
-        return nonces[key];
+        // Return EIP-1271 magic value for valid signature
+        return 0x1626ba7e; // bytes4(keccak256("isValidSignature(bytes32,bytes)"))
     }
 
     // Custom execution functions that can be called by owners or EntryPoint
