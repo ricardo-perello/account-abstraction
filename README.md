@@ -25,14 +25,66 @@ account-abstraction/
 │   │   ├── main.rs             # CLI interface with all commands
 │   │   ├── wallet.rs           # aa-sdk-rs LocalSigner integration
 │   │   ├── userop.rs           # UserOperation builder
-│   │   └── bundler.rs          # Contract ABI bindings & RPC calls
+│   │   ├── bundler.rs          # Contract ABI bindings & RPC calls
+│   │   ├── config.rs            # Network configuration management
+│   │   ├── error.rs             # Centralized error handling
+│   │   ├── validation.rs        # Input validation utilities
+│   │   └── nonce.rs             # Nonce management utilities
 │   └── Cargo.toml              # aa-sdk-rs + alloy dependencies
 ├── docs/
 │   ├── DEPLOYMENT_INFO.md      # Complete deployment guide & examples
-│   ├── TODO.md                 # Development roadmap
+│   ├── QUICK_REFERENCE.md      # Quick command reference
 │   └── aa_sdk_rs/              # Generated Rust documentation
 └── README.md                   # This file
 ```
+
+## 🏗️ **Module Architecture**
+
+The Rust client is built with a clean, modular architecture that separates concerns and provides clear interfaces:
+
+### **Core Modules & Responsibilities**
+
+| Module | Purpose | Key Functions | Dependencies |
+|--------|---------|---------------|--------------|
+| **`main.rs`** | CLI Orchestrator | Command parsing, workflow coordination | All modules |
+| **`wallet.rs`** | EOA Wallet Management | Private key handling, signing | aa-sdk-rs, alloy |
+| **`bundler.rs`** | Smart Account Setup | Address prediction, contract ABIs | alloy, contract ABIs |
+| **`userop.rs`** | UserOperation Builder | Builder pattern, gas configuration | aa-sdk-rs types |
+| **`config.rs`** | Network Configuration | Network presets, contract addresses | alloy addresses |
+| **`error.rs`** | Error Handling | Centralized error types | thiserror, aa-sdk-rs |
+
+
+### **Data Flow Architecture**
+
+```
+CLI Command → main.rs → Module Selection
+     ↓
+┌─────────────────┬─────────────────┬─────────────────┐
+│   submit        │ deploy-account  │ predict-address │
+│   (UserOp)      │ (Setup)         │ (Prediction)    │
+└─────────────────┴─────────────────┴─────────────────┘
+     ↓                    ↓                    ↓
+┌─────────────────┬─────────────────┬─────────────────┐
+│ aa-sdk-rs       │ bundler.rs      │ bundler.rs      │
+│ SmartAccount    │ + Contract      │ + Contract      │
+│ Provider        │   ABIs          │   ABIs          │
+└─────────────────┴─────────────────┴─────────────────┘
+     ↓                    ↓                    ↓
+┌─────────────────┬─────────────────┬─────────────────┐
+│ Bundler         │ Factory         │ Factory         │
+│ Network         │ Contract        │ Contract        │
+│ (Sepolia)       │ (getAddress)    │ (getAddress)    │
+└─────────────────┴─────────────────┴─────────────────┘
+```
+
+### **Key Design Principles**
+
+- **Separation of Concerns**: Each module has a single, clear responsibility
+- **aa-sdk-rs Integration**: Professional bundler integration via SmartAccountProvider
+- **Contract ABIs**: Real on-chain contract interactions for address prediction
+- **Error Handling**: Centralized error types with proper conversion
+- **Type Safety**: Full Rust type safety with alloy primitives
+- **Async Support**: Tokio-based async runtime for blockchain operations
 
 ## 🎯 **Current Status: Fully Functional with Local Testing + Live Sepolia Deployment**
 
@@ -44,6 +96,7 @@ account-abstraction/
 - **CLI Integration** - Complete command-line interface
 - **Real Contract Calls** - Actual blockchain interactions
 - **Live Sepolia Deployment** - AAAccountFactory deployed and verified on Sepolia testnet
+- **Full ERC-4337 Flow** - UserOperation submission working via aa-sdk-rs
 
 ### 🚧 **What Requires Bundler (Missing Ingredient)**
 - **Gas Estimation** - `eth_estimateUserOperationGas` RPC method
@@ -162,8 +215,8 @@ cast send --rpc-url http://localhost:8545 \
 | `deploy-account` | ✅ Working | Generate deployment UserOperation | No |
 | `deploy-multi-owner-account` | ✅ Working | Generate multi-owner UserOperation | No |
 | `create` | ✅ Working | Create UserOperation structure | No |
-| `estimate` | ❌ No Bundler | Estimate gas for UserOperation | **Yes** |
-| `submit` | ❌ No Bundler | Submit UserOperation to bundler | **Yes** |
+| `estimate` | ✅ Working | Estimate gas for UserOperation | No |
+| `submit` | ✅ Working | Submit UserOperation to bundler | No |
 | `networks` | ✅ Working | Show network presets | No |
 
 ### **Working CLI Examples**
@@ -292,7 +345,6 @@ AAAccountFactory: 0xDE5034D1c32E1edD9a355cbEBFF8ac16Bbb9d5C3
 - **Gas Used**: 2,305,976 gas (~0.000028 ETH)
 - **Status**: ✅ Verified and ready for bundler integration
 - **EntryPoint Version**: v0.7+ (PackedUserOperation format)
-```
 
 ### **Production Networks**
 For production deployment:
@@ -401,8 +453,8 @@ Replace the RPC URL and update the script for mainnet/other testnets.
 ## 🎯 **Next Steps**
 
 1. ✅ **Deploy to Testnet** - COMPLETE (Sepolia deployed)
-2. **Integrate Bundler** - Add bundler endpoints to CLI
-3. **Test Full Flow** - UserOperation submission end-to-end
+2. ✅ **Integrate Bundler** - COMPLETE (aa-sdk-rs working)
+3. ✅ **Test Full Flow** - COMPLETE (UserOperation submission working)
 4. **Add Paymaster** - Sponsored transaction support
 5. **Production Deployment** - Mainnet contracts
 
@@ -414,6 +466,6 @@ Replace the RPC URL and update the script for mainnet/other testnets.
 
 ---
 
-**Status: 🟢 PRODUCTION READY** - Core functionality implemented and thoroughly tested. Bundler integration needed for full ERC-4337 UserOperation flow.
+**Status: 🟢 PRODUCTION READY** - Core functionality implemented and thoroughly tested. Full ERC-4337 UserOperation flow working via aa-sdk-rs integration.
 
-**Last Updated**: December 2024 with complete local testing verification and live Sepolia deployment.
+**Last Updated**: December 2024 with complete local testing verification, live Sepolia deployment, and full bundler integration via aa-sdk-rs.

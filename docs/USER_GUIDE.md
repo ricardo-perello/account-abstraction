@@ -302,8 +302,8 @@ cargo run -- create ...
 ## 📚 **Additional Resources**
 
 ### **Documentation**
-- `BUNDLER_BREAKTHROUGH.md` - Technical implementation details
-- `CLI_IMPROVEMENTS_NEEDED.md` - Development history
+- `USER_GUIDE.md` - Complete user guide and implementation details
+- `DEPLOYMENT_INFO.md` - Deployment and testing instructions
 - `DEPLOYMENT_INFO.md` - Contract addresses and networks
 
 ### **Smart Contracts**
