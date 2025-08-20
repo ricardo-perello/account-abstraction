@@ -55,7 +55,7 @@ enum Commands {
         rpc_url: String,
         
         /// Entry point contract address
-        #[arg(short, long, default_value = "0x5FbDB2315678afecb367f032d93F642f64180aa3")]
+        #[arg(short, long, default_value = "0x0000000071727De22E5E9d8BAf0edAc6f37da032")]
         entry_point: String,
         
         /// Chain ID
@@ -86,7 +86,7 @@ enum Commands {
         rpc_url: String,
         
         /// Entry point contract address
-        #[arg(short, long, default_value = "0x5FbDB2315678afecb367f032d93F642f64180aa3")]
+        #[arg(short, long, default_value = "0x0000000071727De22E5E9d8BAf0edAc6f37da032")]
         entry_point: String,
         
         /// Chain ID
@@ -117,7 +117,7 @@ enum Commands {
         rpc_url: String,
         
         /// Entry point contract address
-        #[arg(short, long, default_value = "0x5FbDB2315678afecb367f032d93F642f64180aa3")]
+        #[arg(short, long, default_value = "0x0000000071727De22E5E9d8BAf0edAc6f37da032")]
         entry_point: String,
         
         /// Chain ID
@@ -399,8 +399,15 @@ async fn submit_user_operation(
     let url = url::Url::parse(rpc_url)?;
     let provider = ProviderBuilder::new().on_http(url);
     
-    // Create SimpleAccount with proper factory address  
-    let factory_addr = Address::from_str("0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512")?; // Default factory
+    // Use the deployed factory address for Sepolia or local
+    let factory_addr = if chain_id == 11155111 {
+        Address::from_str("0xDE5034D1c32E1edD9a355cbEBFF8ac16Bbb9d5C3")? // Your deployed AAAccountFactory on Sepolia
+    } else {
+        Address::from_str("0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512")? // Anvil factory
+    };
+    
+    // Create SimpleAccount with proper factory address
+    // Note: Using SimpleAccount even with AAAccountFactory since the core interface is compatible
     let simple_account = SimpleAccount::new(
         Arc::new(provider.clone()),
         entry_point_addr,
@@ -426,17 +433,17 @@ async fn submit_user_operation(
     
     // Submit using SmartAccountProvider
     match smart_provider.send_user_operation(user_op_request, wallet.signer()).await {
-        Ok(user_op_hash) => {
-            println!("✅ UserOperation submitted successfully!");
-            println!("UserOperation Hash: {:?}", user_op_hash);
-            println!("You can track this transaction on the blockchain");
+            Ok(user_op_hash) => {
+                println!("✅ UserOperation submitted successfully!");
+                println!("UserOperation Hash: {:?}", user_op_hash);
+                println!("You can track this transaction on the blockchain");
+            }
+            Err(e) => {
+                println!("❌ Error submitting UserOperation: {}", e);
+                println!("Make sure the bundler is running and supports eth_sendUserOperation");
+                println!("Also ensure the UserOperation is valid and properly signed");
+            }
         }
-        Err(e) => {
-            println!("❌ Error submitting UserOperation: {}", e);
-            println!("Make sure the bundler is running and supports eth_sendUserOperation");
-            println!("Also ensure the UserOperation is valid and properly signed");
-        }
-    }
     
     Ok(())
 }
@@ -513,7 +520,7 @@ async fn deploy_smart_account(
     // Create bundler client
     let bundler_client = BundlerClient::new(
         rpc_url.to_string(),
-        Address::from_str("0x5FbDB2315678afecb367f032d93F642f64180aa3")?, // Default entry point
+        Address::from_str("0x0000000071727De22E5E9d8BAf0edAc6f37da032")?, // Default entry point
         U256::from(chain_id),
     );
     
@@ -623,7 +630,7 @@ async fn deploy_multi_owner_account(
     // Create bundler client for contract interactions
     let bundler_client = BundlerClient::new(
         rpc_url.to_string(),
-        Address::from_str("0x5FbDB2315678afecb367f032d93F642f64180aa3")?, // Default entry point
+        Address::from_str("0x0000000071727De22E5E9d8BAf0edAc6f37da032")?, // Default entry point
         U256::from(chain_id),
     );
     
@@ -745,7 +752,7 @@ async fn run_guided_demo(skip_prompts: bool) -> Result<()> {
     // Anvil constants - clean deployment with deterministic addresses
     let anvil_rpc = "http://localhost:8545";
     let anvil_chain_id = 31337u64;
-    let entry_point = "0x5FbDB2315678afecb367f032d93F642f64180aa3";
+    let entry_point = "0x0000000071727De22E5E9d8BAf0edAc6f37da032";
     let factory = "0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512";
     
     // Test account from Anvil (Owner1)
@@ -859,7 +866,7 @@ fn show_network_presets() -> Result<()> {
     println!("📍 Anvil (Local):");
     println!("  RPC URL: http://localhost:8545");
     println!("  Chain ID: 31337");
-    println!("  EntryPoint: 0x5FbDB2315678afecb367f032d93F642f64180aa3");
+    println!("  EntryPoint: 0x0000000071727De22E5E9d8BAf0edAc6f37da032");
     println!("  Factory: 0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512");
     println!();
     

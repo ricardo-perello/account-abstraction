@@ -5,9 +5,10 @@ import "./AAAccount.sol";
 import "@openzeppelin/contracts/utils/Create2.sol";
 
 /**
- * @title AAAccountFactory
+ * @title AAAccountFactory  
  * @dev Factory contract for deploying AAAccount instances
  * Uses CREATE2 for deterministic addresses based on owner and salt
+ * Compatible with aa_sdk_rs and EntryPoint v0.7+
  */
 contract AAAccountFactory {
     // EntryPoint contract address
@@ -108,6 +109,28 @@ contract AAAccountFactory {
     }
     
     /**
+     * @dev Create account with initCode - REQUIRED for aa_sdk_rs compatibility
+     * This method is called by the EntryPoint when processing UserOperations
+     * @param owner The owner of the account
+     * @param salt Unique salt for CREATE2 deployment
+     * @return account The deployed account address
+     */
+    function createAccountWithInitCode(address owner, uint256 salt) external returns (AAAccount account) {
+        require(owner != address(0), "AAAccountFactory: owner cannot be zero");
+        
+        address addr = getAddress(owner, salt);
+        uint256 codeSize = addr.code.length;
+        if (codeSize > 0) {
+            return AAAccount(payable(addr));
+        }
+        
+        // Deploy using CREATE2 directly
+        account = new AAAccount{salt: bytes32(salt)}(entryPoint, owner);
+        
+        emit AccountCreated(address(account), owner, salt);
+    }
+    
+    /**
      * @dev Check if an account has been deployed
      * @param owner The owner of the account
      * @param salt Unique salt for CREATE2 deployment
@@ -128,4 +151,6 @@ contract AAAccountFactory {
         address predictedAddress = getAddressWithOwners(owners, salt);
         return predictedAddress.code.length > 0;
     }
+
+
 }

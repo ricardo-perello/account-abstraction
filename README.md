@@ -34,15 +34,16 @@ account-abstraction/
 └── README.md                   # This file
 ```
 
-## 🎯 **Current Status: Fully Functional with Local Testing**
+## 🎯 **Current Status: Fully Functional with Local Testing + Live Sepolia Deployment**
 
 ### ✅ **What Works Perfectly**
-- **Smart Contract Deployment** - EntryPoint & Factory deployed on Anvil
+- **Smart Contract Deployment** - EntryPoint & Factory deployed on Anvil + Sepolia
 - **Account Creation** - Single & multi-owner smart accounts
 - **Address Prediction** - Deterministic CREATE2 addresses
 - **Owner Management** - Add/remove owners dynamically
 - **CLI Integration** - Complete command-line interface
 - **Real Contract Calls** - Actual blockchain interactions
+- **Live Sepolia Deployment** - AAAccountFactory deployed and verified on Sepolia testnet
 
 ### 🚧 **What Requires Bundler (Missing Ingredient)**
 - **Gas Estimation** - `eth_estimateUserOperationGas` RPC method
@@ -167,6 +168,7 @@ cast send --rpc-url http://localhost:8545 \
 
 ### **Working CLI Examples**
 
+#### **Local Testing (Anvil)**
 ```bash
 # Generate new wallet
 ./target/release/aa-client generate-wallet
@@ -184,12 +186,34 @@ cast send --rpc-url http://localhost:8545 \
 ./target/release/aa-client deploy-account \
   -p 0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d \
   -s 0x123456
+```
 
-# Create multi-owner deployment
-./target/release/aa-client deploy-multi-owner-account \
-  -p 0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d \
-  -o "0x70997970C51812dc3A010C7d01b50e0d17dc79C8,0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC" \
-  -s 0x654321
+#### **🌐 Sepolia Testnet Testing**
+```bash
+# Test with live Sepolia deployment
+./target/release/aa-client predict-address \
+  -f 0xDE5034D1c32E1edD9a355cbEBFF8ac16Bbb9d5C3 \
+  -o YOUR_WALLET_ADDRESS \
+  -s 0x123456 \
+  -r https://eth-sepolia.g.alchemy.com/v2/YOUR_API_KEY \
+  --chain-id 11155111
+
+# Create smart account on Sepolia
+./target/release/aa-client deploy-account \
+  -p YOUR_PRIVATE_KEY \
+  -f 0xDE5034D1c32E1edD9a355cbEBFF8ac16Bbb9d5C3 \
+  -s 0x123456 \
+  -r https://eth-sepolia.g.alchemy.com/v2/YOUR_API_KEY \
+  --chain-id 11155111
+
+# Test gas estimation (requires bundler)
+./target/release/aa-client estimate \
+  -p YOUR_PRIVATE_KEY \
+  -t 0x0000000000000000000000000000000000000000 \
+  -d 0x \
+  -n 0 \
+  -r https://eth-sepolia.g.alchemy.com/v2/YOUR_API_KEY \
+  --chain-id 11155111
 ```
 
 ## 🏗️ **Smart Contract Architecture**
@@ -251,6 +275,24 @@ Factory: 0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512
 - **Account #0**: `0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266` (Deployer)
 - **Account #1**: `0x70997970C51812dc3A010C7d01b50e0d17dc79C8` (Owner)
 - **Account #2**: `0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC` (Owner)
+
+### **🌐 Sepolia Testnet (LIVE DEPLOYMENT)**
+```bash
+RPC URL: https://eth-sepolia.g.alchemy.com/v2/YOUR_API_KEY
+Bundler URL: https://eth-sepolia.g.alchemy.com/v2/YOUR_API_KEY
+Chain ID: 11155111
+EntryPoint v0.7+: 0x0000000071727De22E5E9d8BAf0edAc6f37da032
+AAAccountFactory: 0xDE5034D1c32E1edD9a355cbEBFF8ac16Bbb9d5C3
+```
+
+**✅ Deployment Details:**
+- **Deployer**: `0xd59c5D74A376f08E3036262F1D59Be24dE138c41`
+- **Transaction**: `0xfc1833c28830cc302eeb475ebe27862f92f9b568ac0ea7f7e5c3651c28b47f0f`
+- **Block**: 9021510
+- **Gas Used**: 2,305,976 gas (~0.000028 ETH)
+- **Status**: ✅ Verified and ready for bundler integration
+- **EntryPoint Version**: v0.7+ (PackedUserOperation format)
+```
 
 ### **Production Networks**
 For production deployment:
@@ -324,9 +366,41 @@ Complete deployment guide with:
 - Paymaster integration (optional)
 - Production RPC endpoints
 
+## 🚀 **Deployment Guide**
+
+### **Deploy to Sepolia Testnet**
+
+1. **Prerequisites:**
+   ```bash
+   # Ensure you have Sepolia ETH
+   # Get Alchemy API key from https://alchemy.com
+   ```
+
+2. **Deploy Factory Contract:**
+   ```bash
+   cd contracts
+   PRIVATE_KEY=0xYOUR_PRIVATE_KEY forge script script/DeploySepolia.s.sol \
+     --rpc-url https://eth-sepolia.g.alchemy.com/v2/YOUR_API_KEY \
+     --broadcast
+   ```
+
+3. **Verify Deployment:**
+   ```bash
+   # Check factory on Etherscan
+   # https://sepolia.etherscan.io/address/0xDE5034D1c32E1edD9a355cbEBFF8ac16Bbb9d5C3
+   ```
+
+**✅ Already Deployed:**
+- **Factory Address**: `0xDE5034D1c32E1edD9a355cbEBFF8ac16Bbb9d5C3`
+- **EntryPoint**: `0x0000000071727De22E5E9d8BAf0edAc6f37da032` (v0.7+)
+- **Status**: Verified and ready for use
+
+### **Deploy to Other Networks**
+Replace the RPC URL and update the script for mainnet/other testnets.
+
 ## 🎯 **Next Steps**
 
-1. **Deploy to Testnet** - Use Sepolia or Goerli
+1. ✅ **Deploy to Testnet** - COMPLETE (Sepolia deployed)
 2. **Integrate Bundler** - Add bundler endpoints to CLI
 3. **Test Full Flow** - UserOperation submission end-to-end
 4. **Add Paymaster** - Sponsored transaction support
@@ -342,4 +416,4 @@ Complete deployment guide with:
 
 **Status: 🟢 PRODUCTION READY** - Core functionality implemented and thoroughly tested. Bundler integration needed for full ERC-4337 UserOperation flow.
 
-**Last Updated**: December 2024 with complete local testing verification.
+**Last Updated**: December 2024 with complete local testing verification and live Sepolia deployment.
