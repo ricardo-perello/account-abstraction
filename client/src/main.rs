@@ -2,17 +2,22 @@
 // This now properly integrates with aa-sdk-rs provider architecture
 
 use clap::{Parser, Subcommand};
-use anyhow::Result;
 use alloy::primitives::{Address, U256, Bytes};
 use std::str::FromStr;
 
 mod userop;
 mod bundler;
 mod wallet;
+mod error;
+mod config;
+mod validation;
+mod nonce;
 
 use userop::UserOperationBuilder;
 use bundler::BundlerClient;
 use wallet::{Wallet, WalletFactory};
+use anyhow::Result;
+use config::list_supported_networks;
 
 // aa-sdk-rs integration - using SmartAccountProvider properly
 use aa_sdk_rs::{
@@ -61,6 +66,14 @@ enum Commands {
         /// Chain ID
         #[arg(short, long, default_value = "31337")]
         chain_id: u64,
+        
+        /// Maximum fee per gas (in wei)
+        #[arg(long, default_value = "20000000000")]
+        max_fee_per_gas: String,
+        
+        /// Maximum priority fee per gas (in wei)
+        #[arg(long, default_value = "2000000000")]
+        max_priority_fee_per_gas: String,
     },
     
     /// Estimate gas for a UserOperation
@@ -92,6 +105,14 @@ enum Commands {
         /// Chain ID
         #[arg(short, long, default_value = "31337")]
         chain_id: u64,
+        
+        /// Maximum fee per gas (in wei)
+        #[arg(long, default_value = "20000000000")]
+        max_fee_per_gas: String,
+        
+        /// Maximum priority fee per gas (in wei)
+        #[arg(long, default_value = "2000000000")]
+        max_priority_fee_per_gas: String,
     },
     
     /// Submit a UserOperation to a bundler
@@ -123,6 +144,14 @@ enum Commands {
         /// Chain ID
         #[arg(short, long, default_value = "31337")]
         chain_id: u64,
+        
+        /// Maximum fee per gas (in wei)
+        #[arg(long, default_value = "20000000000")]
+        max_fee_per_gas: String,
+        
+        /// Maximum priority fee per gas (in wei)
+        #[arg(long, default_value = "2000000000")]
+        max_priority_fee_per_gas: String,
     },
     
     /// Deploy a new smart account using the factory
@@ -220,18 +249,18 @@ enum Commands {
 }
 
 #[tokio::main]
-async fn main() -> Result<()> {
+async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     let cli = Cli::parse();
 
     match &cli.command {
-        Commands::Create { private_key, target, call_data, nonce, rpc_url, entry_point, chain_id } => {
-            create_user_operation(private_key, target, call_data, *nonce, rpc_url, entry_point, *chain_id).await?;
+        Commands::Create { private_key, target, call_data, nonce, rpc_url, entry_point, chain_id, max_fee_per_gas, max_priority_fee_per_gas } => {
+            create_user_operation(private_key, target, call_data, *nonce, rpc_url, entry_point, *chain_id, max_fee_per_gas, max_priority_fee_per_gas).await?;
         }
-        Commands::Estimate { private_key, target, call_data, nonce, rpc_url, entry_point, chain_id } => {
-            estimate_gas(private_key, target, call_data, *nonce, rpc_url, entry_point, *chain_id).await?;
+        Commands::Estimate { private_key, target, call_data, nonce, rpc_url, entry_point, chain_id, max_fee_per_gas, max_priority_fee_per_gas } => {
+            estimate_gas(private_key, target, call_data, *nonce, rpc_url, entry_point, *chain_id, max_fee_per_gas, max_priority_fee_per_gas).await?;
         }
-        Commands::Submit { private_key, target, call_data, nonce, rpc_url, entry_point, chain_id } => {
-            submit_user_operation(private_key, target, call_data, *nonce, rpc_url, entry_point, *chain_id).await?;
+        Commands::Submit { private_key, target, call_data, nonce, rpc_url, entry_point, chain_id, max_fee_per_gas, max_priority_fee_per_gas } => {
+            submit_user_operation(private_key, target, call_data, *nonce, rpc_url, entry_point, *chain_id, max_fee_per_gas, max_priority_fee_per_gas).await?;
         }
         Commands::DeployAccount { private_key, factory, salt, rpc_url, chain_id } => {
             deploy_smart_account(private_key, factory, salt, rpc_url, *chain_id).await?;
@@ -267,6 +296,8 @@ async fn create_user_operation(
     _rpc_url: &str,
     _entry_point: &str,
     _chain_id: u64,
+    _max_fee_per_gas: &str,
+    _max_priority_fee_per_gas: &str,
 ) -> Result<()> {
     println!("Creating UserOperation...");
     
@@ -308,6 +339,8 @@ async fn estimate_gas(
     rpc_url: &str,
     entry_point: &str,
     chain_id: u64,
+    _max_fee_per_gas: &str,
+    _max_priority_fee_per_gas: &str,
 ) -> Result<()> {
     println!("Estimating gas using aa-sdk-rs SmartAccountProvider...");
     
@@ -353,17 +386,17 @@ async fn estimate_gas(
     .build();
     
     // Use SmartAccountProvider for gas estimation
-    match smart_provider.estimate_user_operation_gas(&user_op_request).await {
-        Ok(gas_estimate) => {
-            println!("✅ Gas estimation from SmartAccountProvider:");
-            println!("  Pre-verification gas: {}", gas_estimate.pre_verification_gas);
-            println!("  Verification gas limit: {}", gas_estimate.verification_gas_limit);
-            println!("  Call gas limit: {}", gas_estimate.call_gas_limit);
-        }
-        Err(e) => {
-            println!("❌ Error getting gas estimation: {}", e);
-            println!("Make sure the bundler is running and supports eth_estimateUserOperationGas");
-        }
+    let gas_estimate = smart_provider
+        .estimate_user_operation_gas(&user_op_request)
+        .await?;
+
+    println!("✅ Gas estimation from SmartAccountProvider:");
+    println!("  Pre-verification gas: {}", gas_estimate.pre_verification_gas);
+    println!("  Verification gas limit: {}", gas_estimate.verification_gas_limit);
+    println!("  Call gas limit: {}", gas_estimate.call_gas_limit);
+    
+    if let Some(paymaster_gas) = gas_estimate.paymaster_verification_gas_limit {
+        println!("  Paymaster verification gas: {}", paymaster_gas);
     }
     
     Ok(())
@@ -378,6 +411,8 @@ async fn submit_user_operation(
     rpc_url: &str,
     entry_point: &str,
     chain_id: u64,
+    max_fee_per_gas: &str,
+    max_priority_fee_per_gas: &str,
 ) -> Result<()> {
     println!("Submitting UserOperation using aa-sdk-rs SmartAccountProvider...");
     
@@ -401,7 +436,7 @@ async fn submit_user_operation(
     
     // Use the deployed factory address for Sepolia or local
     let factory_addr = if chain_id == 11155111 {
-        Address::from_str("0xDE5034D1c32E1edD9a355cbEBFF8ac16Bbb9d5C3")? // Your deployed AAAccountFactory on Sepolia
+        Address::from_str("0x59bcaa1BB72972Df0446FCe98798076e718E3b61")? // Your deployed AAAccountFactory on Sepolia
     } else {
         Address::from_str("0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512")? // Anvil factory
     };
@@ -410,23 +445,31 @@ async fn submit_user_operation(
     // Note: Using SimpleAccount even with AAAccountFactory since the core interface is compatible
     let simple_account = SimpleAccount::new(
         Arc::new(provider.clone()),
-        entry_point_addr,
-        factory_addr,
-        wallet.address(),
+        wallet.address(),      // Owner (EOA)
+        factory_addr,          // Factory address
+        entry_point_addr,      // EntryPoint address  
         chain_id,
     );
     
     // Create SmartAccountProvider
     let smart_provider = SmartAccountProvider::new(provider, simple_account);
     
+    // Parse gas fees
+    let max_fee = U256::from_str_radix(max_fee_per_gas, 10)?;
+    let priority_fee = U256::from_str_radix(max_priority_fee_per_gas, 10)?;
+    
+    println!("Gas fees - Max fee: {} wei, Priority fee: {} wei", max_fee, priority_fee);
+    
     // Create a UserOperation using our builder
+    // Let aa-sdk-rs automatically determine sender and initCode for deployment
     let user_op_request = UserOperationBuilder::new(
         target_addr,
         U256::ZERO,
         call_data_bytes.clone()
     )
-    .with_sender(wallet.address())
+    // Don't set sender manually - let SmartAccountProvider handle deployment
     .with_nonce(U256::from(nonce))
+    .with_gas_fees(max_fee, priority_fee)
     .build();
     
     println!("Submitting to bundler via SmartAccountProvider...");
@@ -837,7 +880,7 @@ async fn run_guided_demo(skip_prompts: bool) -> Result<()> {
     let target = "0x0000000000000000000000000000000000000000"; // null address for demo
     let call_data = "0x";
     let nonce = 0u64;
-    create_user_operation(test_private_key, target, call_data, nonce, anvil_rpc, entry_point, anvil_chain_id).await?;
+    create_user_operation(test_private_key, target, call_data, nonce, anvil_rpc, entry_point, anvil_chain_id, "20000000000", "2000000000").await?;
     println!();
     
     println!("✅ Demo Complete!");
@@ -859,30 +902,32 @@ async fn run_guided_demo(skip_prompts: bool) -> Result<()> {
 
 /// Show network presets and configuration
 fn show_network_presets() -> Result<()> {
-    println!("🌐 Network Presets");
-    println!("==================");
+    println!("🌐 Supported Networks");
+    println!("=====================");
     println!();
     
-    println!("📍 Anvil (Local):");
-    println!("  RPC URL: http://localhost:8545");
-    println!("  Chain ID: 31337");
-    println!("  EntryPoint: 0x0000000071727De22E5E9d8BAf0edAc6f37da032");
-    println!("  Factory: 0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512");
-    println!();
+    let networks = list_supported_networks();
     
-    println!("🌍 Sepolia (Testnet):");
-    println!("  RPC URL: https://eth-sepolia.g.alchemy.com/v2/YOUR_API_KEY");
-    println!("  Chain ID: 11155111");
-    println!("  EntryPoint: [Deploy with forge script]");
-    println!("  Factory: [Deploy with forge script]");
-    println!();
+    for network in networks {
+        println!("📍 {} (Chain ID: {}):", network.name, network.chain_id);
+        println!("  EntryPoint: {}", network.entry_point);
+        println!("  Factory: {}", network.factory);
+        println!("  RPC Template: {}", network.rpc_url_template);
+        if let Some(bundler) = network.bundler_url_template {
+            println!("  Bundler Template: {}", bundler);
+        }
+        println!();
+    }
     
     println!("📋 Usage Examples:");
-    println!("  # Anvil (default)");
+    println!("  # Anvil (local)");
     println!("  aa-client demo --yes");
     println!();
-    println!("  # Sepolia");
-    println!("  aa-client create -r https://eth-sepolia.g.alchemy.com/v2/KEY --chain-id 11155111 -p KEY -t TARGET -c DATA -n NONCE");
+    println!("  # Sepolia testnet");
+    println!("  aa-client create --chain-id 11155111 --private-key YOUR_KEY --target 0x... --call-data 0x... --nonce 0");
+    println!();
+    println!("  # With custom RPC");
+    println!("  aa-client create --rpc-url https://eth-sepolia.g.alchemy.com/v2/YOUR_API_KEY --chain-id 11155111 ...");
     
     Ok(())
 }

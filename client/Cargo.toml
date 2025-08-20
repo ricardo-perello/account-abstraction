@@ -19,3 +19,4 @@ clap = { version = "4.0", features = ["derive"] }
 getrandom = "0.2"
 k256 = { version = "0.13", features = ["ecdsa", "sha256"] }
 url = "2.4"
+thiserror = "1.0"

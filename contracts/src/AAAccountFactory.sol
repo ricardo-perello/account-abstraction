@@ -3,20 +3,48 @@ pragma solidity ^0.8.28;
 
 import "./AAAccount.sol";
 import "@openzeppelin/contracts/utils/Create2.sol";
+import "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
+import "@account-abstraction/contracts/interfaces/ISenderCreator.sol";
 
 /**
  * @title AAAccountFactory  
- * @dev Factory contract for deploying AAAccount instances
+ * @dev Factory contract for deploying AAAccount instances using proxy pattern
+ * Fully compatible with SimpleAccountFactory interface and aa_sdk_rs
  * Uses CREATE2 for deterministic addresses based on owner and salt
- * Compatible with aa_sdk_rs and EntryPoint v0.7+
+ * Compatible with EntryPoint v0.7+
  */
 contract AAAccountFactory {
     // EntryPoint contract address
     IEntryPoint public immutable entryPoint;
     
+    // Implementation contract for proxy deployments
+    AAAccount public immutable accountImplementation;
+    
+    // SenderCreator for access control (same as SimpleAccountFactory)
+    ISenderCreator public immutable senderCreator;
+    
     // Events
     event AccountCreated(address indexed account, address indexed owner, uint256 salt);
     event AccountCreatedWithOwners(address indexed account, address[] owners, uint256 salt);
+
+    // Modifiers
+    modifier validOwners(address[] calldata owners) {
+        require(owners.length > 0 && owners.length <= 10, "AAAccountFactory: invalid owner count");
+        
+        // Check for duplicates and zero addresses
+        for (uint256 i = 0; i < owners.length; i++) {
+            require(owners[i] != address(0), "AAAccountFactory: owner cannot be zero");
+            for (uint256 j = i + 1; j < owners.length; j++) {
+                require(owners[i] != owners[j], "AAAccountFactory: duplicate owner");
+            }
+        }
+        _;
+    }
+
+    modifier validSingleOwner(address owner) {
+        require(owner != address(0), "AAAccountFactory: owner cannot be zero");
+        _;
+    }
     
     /**
      * @dev Constructor
@@ -24,6 +52,16 @@ contract AAAccountFactory {
      */
     constructor(IEntryPoint _entryPoint) {
         entryPoint = _entryPoint;
+        accountImplementation = new AAAccount(_entryPoint, address(0)); // Create implementation
+        
+        // Try to get senderCreator, but handle the case where it doesn't exist
+        try _entryPoint.senderCreator() returns (ISenderCreator _senderCreator) {
+            senderCreator = _senderCreator;
+        } catch {
+            // If senderCreator() doesn't exist, set to zero address
+            // This means createAccount() will always revert, but createAccountDirect() will work
+            senderCreator = ISenderCreator(address(0));
+        }
     }
     
     /**
@@ -34,8 +72,11 @@ contract AAAccountFactory {
      */
     function getAddress(address owner, uint256 salt) public view returns (address) {
         return Create2.computeAddress(bytes32(salt), keccak256(abi.encodePacked(
-            type(AAAccount).creationCode,
-            abi.encode(entryPoint, owner)
+            type(ERC1967Proxy).creationCode,
+            abi.encode(
+                address(accountImplementation),
+                abi.encodeCall(AAAccount.initialize, (owner))
+            )
         )));
     }
     
@@ -46,33 +87,50 @@ contract AAAccountFactory {
      * @return The predicted account address
      */
     function getAddressWithOwners(address[] calldata owners, uint256 salt) public view returns (address) {
-        // Use the same salt modification as in deployment
-        bytes32 actualSalt = keccak256(abi.encodePacked(salt, owners));
+        // Create deterministic salt based on owners array for uniqueness
+        bytes32 actualSalt = _computeMultiOwnerSalt(salt, owners);
         return Create2.computeAddress(actualSalt, keccak256(abi.encodePacked(
-            type(AAAccount).creationCode,
-            abi.encode(entryPoint, address(0)) // Pass zero address, will use initializeWithOwners
+            type(ERC1967Proxy).creationCode,
+            abi.encode(
+                address(accountImplementation),
+                abi.encodeCall(AAAccount.initializeWithOwners, (owners))
+            )
         )));
+    }
+
+    /**
+     * @dev Compute deterministic salt for multi-owner accounts
+     * @param baseSalt Base salt provided by user
+     * @param owners Array of owner addresses
+     * @return Computed salt that ensures uniqueness
+     */
+    function _computeMultiOwnerSalt(uint256 baseSalt, address[] calldata owners) internal pure returns (bytes32) {
+        return keccak256(abi.encodePacked(baseSalt, owners));
     }
     
     /**
      * @dev Create a new account with a single owner
+     * Compatible with SimpleAccountFactory interface
      * @param owner The owner of the account
      * @param salt Unique salt for CREATE2 deployment
-     * @return account The deployed account address
+     * @return ret The deployed account address
      */
-    function createAccount(address owner, uint256 salt) external returns (AAAccount account) {
-        require(owner != address(0), "AAAccountFactory: owner cannot be zero");
-        
+    function createAccount(address owner, uint256 salt) public returns (AAAccount ret) {
+        // Only enforce SenderCreator restriction if it's available
+        if (address(senderCreator) != address(0)) {
+            require(msg.sender == address(senderCreator), "only callable from SenderCreator");
+        }
         address addr = getAddress(owner, salt);
         uint256 codeSize = addr.code.length;
         if (codeSize > 0) {
             return AAAccount(payable(addr));
         }
+        ret = AAAccount(payable(new ERC1967Proxy{salt : bytes32(salt)}(
+                address(accountImplementation),
+                abi.encodeCall(AAAccount.initialize, (owner))
+            )));
         
-        // Deploy using CREATE2 directly
-        account = new AAAccount{salt: bytes32(salt)}(entryPoint, owner);
-        
-        emit AccountCreated(address(account), owner, salt);
+        emit AccountCreated(address(ret), owner, salt);
     }
     
     /**
@@ -81,51 +139,40 @@ contract AAAccountFactory {
      * @param salt Unique salt for CREATE2 deployment
      * @return account The deployed account address
      */
-    function createAccountWithOwners(address[] calldata owners, uint256 salt) external returns (AAAccount account) {
-        require(owners.length > 0, "AAAccountFactory: owners array cannot be empty");
-        require(owners.length <= 10, "AAAccountFactory: too many owners (max 10)");
-        
-        // Validate all owners
-        for (uint256 i = 0; i < owners.length; i++) {
-            require(owners[i] != address(0), "AAAccountFactory: owner cannot be zero");
-            // Check for duplicates
-            for (uint256 j = i + 1; j < owners.length; j++) {
-                require(owners[i] != owners[j], "AAAccountFactory: duplicate owner");
-            }
-        }
-        
+    function createAccountWithOwners(address[] calldata owners, uint256 salt) external validOwners(owners) returns (AAAccount account) {
         address addr = getAddressWithOwners(owners, salt);
         uint256 codeSize = addr.code.length;
         if (codeSize > 0) {
             return AAAccount(payable(addr));
         }
         
-        // Deploy using CREATE2 directly, then initialize with multiple owners
-        bytes32 actualSalt = keccak256(abi.encodePacked(salt, owners));
-        account = new AAAccount{salt: actualSalt}(entryPoint, address(0));
-        account.initializeWithOwners(owners);
+        // Deploy using CREATE2 with proxy pattern
+        bytes32 actualSalt = _computeMultiOwnerSalt(salt, owners);
+        account = AAAccount(payable(new ERC1967Proxy{salt : actualSalt}(
+                address(accountImplementation),
+                abi.encodeCall(AAAccount.initializeWithOwners, (owners))
+            )));
         
         emit AccountCreatedWithOwners(address(account), owners, salt);
     }
     
     /**
-     * @dev Create account with initCode - REQUIRED for aa_sdk_rs compatibility
-     * This method is called by the EntryPoint when processing UserOperations
+     * @dev Create account directly (without SenderCreator restriction)
+     * For direct deployment when not using UserOperations
      * @param owner The owner of the account
      * @param salt Unique salt for CREATE2 deployment
      * @return account The deployed account address
      */
-    function createAccountWithInitCode(address owner, uint256 salt) external returns (AAAccount account) {
-        require(owner != address(0), "AAAccountFactory: owner cannot be zero");
-        
+    function createAccountDirect(address owner, uint256 salt) external validSingleOwner(owner) returns (AAAccount account) {
         address addr = getAddress(owner, salt);
         uint256 codeSize = addr.code.length;
         if (codeSize > 0) {
             return AAAccount(payable(addr));
         }
-        
-        // Deploy using CREATE2 directly
-        account = new AAAccount{salt: bytes32(salt)}(entryPoint, owner);
+        account = AAAccount(payable(new ERC1967Proxy{salt : bytes32(salt)}(
+                address(accountImplementation),
+                abi.encodeCall(AAAccount.initialize, (owner))
+            )));
         
         emit AccountCreated(address(account), owner, salt);
     }

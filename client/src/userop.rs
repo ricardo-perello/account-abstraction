@@ -3,6 +3,7 @@
 
 use alloy::primitives::{Address, Bytes, U256};
 use serde::{Deserialize, Serialize};
+use crate::error::Result;
 
 // Re-export aa-sdk-rs types for compatibility
 pub use aa_sdk_rs::types::{
@@ -36,8 +37,7 @@ impl UserOperationBuilder {
         self
     }
 
-    /// Set gas fees (currently used in tests)
-    #[allow(dead_code)]
+    /// Set gas fees
     pub fn with_gas_fees(mut self, max_fee_per_gas: U256, max_priority_fee_per_gas: U256) -> Self {
         self.request = self.request
             .max_fee_per_gas(max_fee_per_gas)
@@ -54,6 +54,13 @@ impl UserOperationBuilder {
     /// Build the final UserOperationRequest
     pub fn build(self) -> UserOperationRequest {
         self.request
+    }
+
+    /// Build with basic validation
+    pub fn build_validated(self) -> Result<UserOperationRequest> {
+        // For now, just return the request
+        // Full validation will be done separately
+        Ok(self.request)
     }
 }
 

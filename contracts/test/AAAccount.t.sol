@@ -45,7 +45,7 @@ contract AAAccountTest is Test {
         uint256 salt = uint256(keccak256("test-salt-1"));
         
         // Create account with single owner
-        AAAccount newAccount = factory.createAccount(owner1, salt);
+        AAAccount newAccount = factory.createAccountDirect(owner1, salt);
         
         // Verify account was created
         assertTrue(address(newAccount) != address(0));
@@ -80,7 +80,7 @@ contract AAAccountTest is Test {
     function testAddOwner() public {
         // Create account
         uint256 salt = uint256(keccak256("test-salt-3"));
-        AAAccount newAccount = factory.createAccount(owner1, salt);
+        AAAccount newAccount = factory.createAccountDirect(owner1, salt);
         
         // Add new owner (owner1 should be able to add owner2)
         vm.prank(owner1);
@@ -116,7 +116,7 @@ contract AAAccountTest is Test {
     function testNonOwnerCannotAddOwner() public {
         // Create account with owner1
         uint256 salt = uint256(keccak256("test-salt-5"));
-        AAAccount newAccount = factory.createAccount(owner1, salt);
+        AAAccount newAccount = factory.createAccountDirect(owner1, salt);
         
         // Try to add owner2 from owner3 (should fail)
         vm.prank(owner3);
@@ -127,7 +127,7 @@ contract AAAccountTest is Test {
     function testNonOwnerCannotRemoveOwner() public {
         // Create account with owner1
         uint256 salt = uint256(keccak256("test-salt-6"));
-        AAAccount newAccount = factory.createAccount(owner1, salt);
+        AAAccount newAccount = factory.createAccountDirect(owner1, salt);
         
         // Try to remove owner1 from owner3 (should fail)
         vm.prank(owner3);
@@ -138,7 +138,7 @@ contract AAAccountTest is Test {
     function testCannotRemoveLastOwner() public {
         // Create account with single owner
         uint256 salt = uint256(keccak256("test-salt-7"));
-        AAAccount newAccount = factory.createAccount(owner1, salt);
+        AAAccount newAccount = factory.createAccountDirect(owner1, salt);
         
         // Try to remove the only owner (should fail with "cannot remove self")
         vm.prank(owner1);
@@ -151,7 +151,7 @@ contract AAAccountTest is Test {
         address predictedAddress = factory.getAddress(owner1, salt);
         
         // Create account
-        AAAccount newAccount = factory.createAccount(owner1, salt);
+        AAAccount newAccount = factory.createAccountDirect(owner1, salt);
         
         // Verify predicted address matches actual address
         assertEq(address(newAccount), predictedAddress);
@@ -159,7 +159,7 @@ contract AAAccountTest is Test {
     
     function testEntryPoint() public {
         uint256 salt = uint256(keccak256("test-salt-9"));
-        AAAccount newAccount = factory.createAccount(owner1, salt);
+        AAAccount newAccount = factory.createAccountDirect(owner1, salt);
         
         // Verify entryPoint is set correctly
         assertEq(address(newAccount.entryPoint()), address(entryPoint));
@@ -167,7 +167,7 @@ contract AAAccountTest is Test {
     
     function testAccountInitialization() public {
         uint256 salt = uint256(keccak256("test-salt-10"));
-        AAAccount newAccount = factory.createAccount(owner1, salt);
+        AAAccount newAccount = factory.createAccountDirect(owner1, salt);
         
         // Verify account is initialized
         assertTrue(newAccount.owners(owner1));
@@ -181,7 +181,7 @@ contract AAAccountTest is Test {
     function testValidateUserOpWithValidSignature() public {
         // Create account
         uint256 salt = uint256(keccak256("test-userOp-1"));
-        AAAccount testAccount = factory.createAccount(owner1, salt);
+        AAAccount testAccount = factory.createAccountDirect(owner1, salt);
         
         // Fund the account
         vm.deal(address(testAccount), 1 ether);
@@ -223,7 +223,7 @@ contract AAAccountTest is Test {
     function testValidateUserOpWithInvalidSignature() public {
         // Create account
         uint256 salt = uint256(keccak256("test-userOp-2"));
-        AAAccount testAccount = factory.createAccount(owner1, salt);
+        AAAccount testAccount = factory.createAccountDirect(owner1, salt);
         
         // Fund the account
         vm.deal(address(testAccount), 1 ether);
@@ -260,7 +260,7 @@ contract AAAccountTest is Test {
     function testValidateUserOpWithUnauthorizedSigner() public {
         // Create account with owner1
         uint256 salt = uint256(keccak256("test-userOp-3"));
-        AAAccount testAccount = factory.createAccount(owner1, salt);
+        AAAccount testAccount = factory.createAccountDirect(owner1, salt);
         
         // Fund the account
         vm.deal(address(testAccount), 1 ether);
@@ -302,7 +302,7 @@ contract AAAccountTest is Test {
     function testUserOperationExecution() public {
         // Create account
         uint256 salt = uint256(keccak256("test-userOp-exec"));
-        AAAccount testAccount = factory.createAccount(owner1, salt);
+        AAAccount testAccount = factory.createAccountDirect(owner1, salt);
         
         // Fund the account with more ETH for gas
         vm.deal(address(testAccount), 10 ether);
@@ -350,7 +350,7 @@ contract AAAccountTest is Test {
     function testIsValidSignatureEIP1271() public {
         // Create account
         uint256 salt = uint256(keccak256("test-eip1271"));
-        AAAccount testAccount = factory.createAccount(owner1, salt);
+        AAAccount testAccount = factory.createAccountDirect(owner1, salt);
         
         // Create a message hash
         bytes32 messageHash = keccak256("test message");
@@ -378,7 +378,7 @@ contract AAAccountTest is Test {
     function testNonceManagement() public {
         // Create account
         uint256 salt = uint256(keccak256("test-nonce"));
-        AAAccount testAccount = factory.createAccount(owner1, salt);
+        AAAccount testAccount = factory.createAccountDirect(owner1, salt);
         
         // Check initial nonce (should be 0)
         uint256 initialNonce = testAccount.getNonce();

@@ -126,10 +126,7 @@ contract AAAccount is BaseAccount {
     }
 
     function _requireForExecute() internal view override {
-        require(
-            msg.sender == address(entryPoint()) || owners[msg.sender],
-            "account: not Owner or EntryPoint"
-        );
+        require(msg.sender == address(entryPoint()), "account: not EntryPoint");
     }
 
     function _validateSignature(
@@ -187,8 +184,47 @@ contract AAAccount is BaseAccount {
         emit TransactionExecuted(target, value, data);
     }
 
+    /**
+     * @dev Execute a transaction directly from an owner (bypassing EntryPoint)
+     * @param target The target contract address
+     * @param value The ETH value to send
+     * @param data The call data
+     */
+    function executeDirectly(address target, uint256 value, bytes calldata data) external {
+        require(owners[msg.sender], "AAAccount: caller is not an owner");
+        require(target != address(0), "AAAccount: invalid target");
+        
+        (bool success, ) = target.call{value: value}(data);
+        require(success, "AAAccount: execution failed");
+        
+        emit TransactionExecuted(target, value, data);
+    }
+
     function executeBatch(address[] calldata targets, uint256[] calldata values, bytes[] calldata datas) external {
         _requireForExecute();
+        require(
+            targets.length == values.length && targets.length == datas.length,
+            "AAAccount: array length mismatch"
+        );
+        
+        for (uint256 i = 0; i < targets.length; i++) {
+            require(targets[i] != address(0), "AAAccount: invalid target");
+            
+            (bool success, ) = targets[i].call{value: values[i]}(datas[i]);
+            require(success, "AAAccount: batch execution failed");
+        }
+        
+        emit BatchTransactionExecuted(targets, values, datas);
+    }
+
+    /**
+     * @dev Execute multiple transactions directly from an owner (bypassing EntryPoint)
+     * @param targets Array of target contract addresses
+     * @param values Array of ETH values to send
+     * @param datas Array of call data
+     */
+    function executeBatchDirectly(address[] calldata targets, uint256[] calldata values, bytes[] calldata datas) external {
+        require(owners[msg.sender], "AAAccount: caller is not an owner");
         require(
             targets.length == values.length && targets.length == datas.length,
             "AAAccount: array length mismatch"
