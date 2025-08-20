@@ -1,7 +1,7 @@
 // Refactored to use aa-sdk-rs signer functionality
 // This replaces custom wallet implementation with proper SDK signers
 
-use alloy::primitives::{Address, Bytes, B256};
+use alloy::primitives::Address;
 use alloy::signers::{k256::ecdsa::SigningKey, local::LocalSigner};
 use anyhow::Result;
 
@@ -46,32 +46,9 @@ impl Wallet {
     }
 
     /// Get a reference to the inner LocalSigner for use with aa-sdk-rs
-    #[allow(dead_code)]
     pub fn signer(&self) -> &LocalSigner<SigningKey> {
         &self.signer
     }
-
-    /// Sign a message hash using aa-sdk-rs SmartAccountSigner trait
-    #[allow(dead_code)]
-    pub async fn sign(&self, message_hash: B256) -> Result<Bytes> {
-        self.signer.sign_hash_data(&message_hash).await
-            .map_err(|e| anyhow::anyhow!("Signing error: {}", e))
-    }
-
-    /// Sign a UserOperation hash using aa-sdk-rs
-    #[allow(dead_code)]
-    pub async fn sign_user_operation(&self, user_op_hash: B256) -> Result<Bytes> {
-        self.sign(user_op_hash).await
-    }
-
-    /// Sign a message using aa-sdk-rs (with EIP-191 prefix)
-    #[allow(dead_code)]
-    pub async fn sign_message<S: Send + Sync + AsRef<[u8]>>(&self, message: S) -> Result<Bytes> {
-        self.signer.sign_message(message).await
-            .map_err(|e| anyhow::anyhow!("Message signing error: {}", e))
-    }
-
-    // Custom signing methods removed - now using aa-sdk-rs LocalSigner
 
     /// Export private key as hex string (for testing/debugging)
     /// Note: This accesses the signing key from LocalSigner
@@ -94,28 +71,6 @@ impl WalletFactory {
             .map_err(|e| anyhow::anyhow!("Failed to generate random bytes: {}", e))?;
         
         Wallet::new(private_key)
-    }
-
-    /// Create a wallet from a mnemonic phrase using proper derivation
-    /// Note: For full BIP39 support, consider using dedicated crate like 'bip39'
-    #[allow(dead_code)]
-    pub fn from_mnemonic(mnemonic: &str) -> Result<Wallet> {
-        // Use alloy's ECDSA key derivation for better compatibility
-        // This is still simplified - for production use proper BIP39 library
-        use alloy::primitives::keccak256;
-        
-        // Hash the mnemonic multiple times for better entropy distribution
-        let mut hash = keccak256(mnemonic.as_bytes());
-        hash = keccak256(hash);
-        let private_key: [u8; 32] = hash.into();
-        
-        // Validate that we can create a valid signing key
-        let signing_key = alloy::signers::k256::ecdsa::SigningKey::from_bytes(private_key.as_slice().into())
-            .map_err(|e| anyhow::anyhow!("Failed to derive valid private key from mnemonic: {}", e))?;
-        
-        // Create wallet using the validated key
-        let signer = alloy::signers::local::LocalSigner::from(signing_key);
-        Ok(Wallet { signer })
     }
 }
 
@@ -162,60 +117,12 @@ mod tests {
         assert!(result.is_err());
     }
 
-    #[tokio::test]
-    async fn test_signature_creation() {
-        let wallet = Wallet::new([1u8; 32]).unwrap();
-        let message_hash = B256::from([1u8; 32]);
-        let signature = wallet.sign(message_hash).await.unwrap();
-        assert_eq!(signature.len(), 65); // r(32) + s(32) + v(1)
-    }
-
-    #[tokio::test]
-    async fn test_user_operation_signing() {
-        let wallet = Wallet::new([1u8; 32]).unwrap();
-        let message_hash = B256::from([1u8; 32]);
-        let signature = wallet.sign_user_operation(message_hash).await.unwrap();
-        assert_eq!(signature.len(), 65);
-    }
-
-    #[tokio::test]
-    async fn test_message_signing() {
-        let wallet = Wallet::new([1u8; 32]).unwrap();
-        let message = b"Hello, world!";
-        let signature = wallet.sign_message(message).await.unwrap();
-        assert_eq!(signature.len(), 65); // r(32) + s(32) + v(1)
-    }
-
     #[test]
     fn test_wallet_factory_random() {
         let wallet1 = WalletFactory::random().unwrap();
         let wallet2 = WalletFactory::random().unwrap();
         
         // Should generate different wallets
-        assert_ne!(wallet1.address(), wallet2.address());
-        assert_ne!(wallet1.export_private_key(), wallet2.export_private_key());
-    }
-
-    #[test]
-    fn test_wallet_factory_from_mnemonic() {
-        let mnemonic = "test mnemonic phrase";
-        let wallet1 = WalletFactory::from_mnemonic(mnemonic).unwrap();
-        let wallet2 = WalletFactory::from_mnemonic(mnemonic).unwrap();
-        
-        // Should generate deterministic wallets from same mnemonic
-        assert_eq!(wallet1.address(), wallet2.address());
-        assert_eq!(wallet1.export_private_key(), wallet2.export_private_key());
-    }
-
-    #[test]
-    fn test_wallet_factory_from_different_mnemonics() {
-        let mnemonic1 = "test mnemonic phrase one";
-        let mnemonic2 = "test mnemonic phrase two";
-        
-        let wallet1 = WalletFactory::from_mnemonic(mnemonic1).unwrap();
-        let wallet2 = WalletFactory::from_mnemonic(mnemonic2).unwrap();
-        
-        // Should generate different wallets from different mnemonics
         assert_ne!(wallet1.address(), wallet2.address());
         assert_ne!(wallet1.export_private_key(), wallet2.export_private_key());
     }
@@ -238,19 +145,6 @@ mod tests {
         
         // Imported wallet should have same address
         assert_eq!(original_wallet.address(), imported_wallet.address());
-    }
-
-    #[tokio::test]
-    async fn test_signature_uniqueness() {
-        let wallet = Wallet::new([1u8; 32]).unwrap();
-        let message1 = B256::from([1u8; 32]);
-        let message2 = B256::from([2u8; 32]);
-        
-        let sig1 = wallet.sign(message1).await.unwrap();
-        let sig2 = wallet.sign(message2).await.unwrap();
-        
-        // Different messages should have different signatures
-        assert_ne!(sig1, sig2);
     }
 
     #[test]

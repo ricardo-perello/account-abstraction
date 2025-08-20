@@ -3,7 +3,6 @@
 
 use alloy::primitives::{Address, Bytes, U256};
 use serde::{Deserialize, Serialize};
-use crate::error::Result;
 
 // Re-export aa-sdk-rs types for compatibility
 pub use aa_sdk_rs::types::{
@@ -11,9 +10,6 @@ pub use aa_sdk_rs::types::{
     AccountCall, 
     ExecuteCall
 };
-
-// Note: UserOperation type alias removed to eliminate unused warning
-// Use aa_sdk_rs::types::UserOperation directly where needed
 
 /// Helper struct for creating user operations with a builder pattern
 /// This provides backward compatibility with existing code
@@ -55,32 +51,7 @@ impl UserOperationBuilder {
     pub fn build(self) -> UserOperationRequest {
         self.request
     }
-
-    /// Build with basic validation
-    pub fn build_validated(self) -> Result<UserOperationRequest> {
-        // For now, just return the request
-        // Full validation will be done separately
-        Ok(self.request)
-    }
 }
-
-/// Helper functions for backward compatibility (used in tests)
-#[allow(dead_code)]
-pub fn create_execute_call(target: Address, value: U256, data: Bytes) -> ExecuteCall {
-    ExecuteCall::new(target, value, data)
-}
-
-#[allow(dead_code)]
-pub fn create_account_call(execute_call: ExecuteCall) -> AccountCall {
-    AccountCall::Execute(execute_call)
-}
-
-#[allow(dead_code)]
-pub fn create_user_operation_request(account_call: AccountCall) -> UserOperationRequest {
-    UserOperationRequest::new_with_call(account_call)
-}
-
-// Remove custom PackedUserOperation - use aa-sdk-rs types instead
 
 // Response types: We use aa-sdk-rs types directly for consistency
 // UserOpHash and UserOperationGasEstimation are re-exported for convenience
@@ -132,20 +103,6 @@ mod tests {
         
         let _request = builder.build();
         // Test passes if builder works without errors
-    }
-
-    #[test]
-    fn test_helper_functions() {
-        let execute_call = create_execute_call(
-            Address::ZERO,
-            U256::from(100),
-            Bytes::default(),
-        );
-        
-        let account_call = create_account_call(execute_call);
-        let _user_op_request = create_user_operation_request(account_call);
-        
-        // Test passes if helper functions work without errors
     }
 
     #[test]

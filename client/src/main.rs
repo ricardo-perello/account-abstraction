@@ -10,8 +10,6 @@ mod bundler;
 mod wallet;
 mod error;
 mod config;
-mod validation;
-mod nonce;
 
 use userop::UserOperationBuilder;
 use bundler::BundlerClient;
@@ -904,9 +902,7 @@ fn show_network_presets() -> Result<()> {
         println!("  EntryPoint: {}", network.entry_point);
         println!("  Factory: {}", network.factory);
         println!("  RPC Template: {}", network.rpc_url_template);
-        if let Some(bundler) = network.bundler_url_template {
-            println!("  Bundler Template: {}", bundler);
-        }
+        // Bundler URL is the same as RPC URL for simplicity
         println!();
     }
     
