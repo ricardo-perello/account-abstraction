@@ -113,7 +113,7 @@ enum Commands {
         max_priority_fee_per_gas: String,
     },
     
-    /// Submit a UserOperation to a bundler
+    /// Submit a UserOperation to a bundler (for arbitrary transactions)
     Submit {
         /// Private key in hex format
         #[arg(short, long)]
@@ -156,7 +156,7 @@ enum Commands {
         max_priority_fee_per_gas: String,
     },
     
-    /// Deploy a new smart account using the factory
+    /// Deploy a new smart account using the factory via bundler
     DeployAccount {
         /// Private key in hex format (for signing deployment transaction)
         #[arg(short, long)]
@@ -177,9 +177,17 @@ enum Commands {
         /// Chain ID
         #[arg(short, long, default_value = "31337")]
         chain_id: u64,
+        
+        /// Maximum fee per gas (in wei)
+        #[arg(long, default_value = "20000000000")]
+        max_fee_per_gas: String,
+        
+        /// Maximum priority fee per gas (in wei)
+        #[arg(long, default_value = "2000000000")]
+        max_priority_fee_per_gas: String,
     },
     
-    /// Deploy a new smart account with multiple owners
+    /// Deploy a new smart account with multiple owners via bundler
     DeployMultiOwnerAccount {
         /// Private key in hex format (for signing deployment transaction)
         #[arg(short, long)]
@@ -264,8 +272,8 @@ async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
         Commands::Submit { private_key, target, call_data, nonce, rpc_url, entry_point, chain_id, value, max_fee_per_gas, max_priority_fee_per_gas } => {
             submit_user_operation(private_key, target, call_data, *nonce, rpc_url, entry_point, *chain_id, value, max_fee_per_gas, max_priority_fee_per_gas).await?;
         }
-        Commands::DeployAccount { private_key, factory, salt, rpc_url, chain_id } => {
-            deploy_smart_account(private_key, factory, salt, rpc_url, *chain_id).await?;
+        Commands::DeployAccount { private_key, factory, salt, rpc_url, chain_id, max_fee_per_gas, max_priority_fee_per_gas } => {
+            deploy_smart_account(private_key, factory, salt, rpc_url, *chain_id, max_fee_per_gas, max_priority_fee_per_gas).await?;
         }
         Commands::DeployMultiOwnerAccount { private_key, factory, owners, salt, rpc_url, chain_id } => {
             deploy_multi_owner_account(private_key, factory, owners, salt, rpc_url, *chain_id).await?;
@@ -513,8 +521,10 @@ async fn deploy_smart_account(
     salt: &str,
     rpc_url: &str,
     chain_id: u64,
+    max_fee_per_gas: &str,
+    max_priority_fee_per_gas: &str,
 ) -> Result<()> {
-    println!("Deploying new smart account...");
+    println!("🚀 Deploying new smart account via bundler...");
     
     // Create wallet from private key
     let wallet = Wallet::from_hex(private_key)?;
@@ -560,31 +570,72 @@ async fn deploy_smart_account(
     match bundler_client.get_predicted_address(factory_addr, wallet.address(), salt_u256).await {
         Ok(predicted_address) => {
             println!("📍 Predicted smart account address: {}", predicted_address);
+            println!("💡 Make sure this address is funded with ETH for gas fees");
             
-            // Generate real call data using the factory contract ABI
-            let provider = bundler_client.create_provider().await?;
-            let factory_contract = bundler::SimpleAccountFactory::new(factory_addr, &provider);
+            println!("🔧 Creating deployment UserOperation...");
             
-            // Get the call data for createAccount
-            let call_data = factory_contract.createAccount(wallet.address(), salt_u256).calldata().clone();
+            // Create concrete provider type for aa-sdk-rs
+            let url = url::Url::parse(rpc_url)?;
+            let provider = ProviderBuilder::new().on_http(url);
             
-            // Create a UserOperation for deployment
-            let _user_op_request = UserOperationBuilder::new(
-                factory_addr,
-                U256::ZERO,
-                call_data.clone()
+            // Create SimpleAccount with proper factory address
+            let entry_point_addr = Address::from_str("0x0000000071727De22E5E9d8BAf0edAc6f37da032")?;
+            let simple_account = SimpleAccount::new(
+                Arc::new(provider.clone()),
+                wallet.address(),      // Owner (EOA)
+                factory_addr,          // Factory address
+                entry_point_addr,      // EntryPoint address  
+                chain_id,
+            );
+            
+            // Create SmartAccountProvider
+            let smart_provider = SmartAccountProvider::new(provider, simple_account);
+            
+            // Let aa-sdk-rs automatically handle deployment - this is the key fix from the documentation!
+            println!("🔧 Letting aa-sdk-rs automatically handle deployment...");
+            println!("📊 aa-sdk-rs will automatically:");
+            println!("  - Detect that the account doesn't exist");
+            println!("  - Generate proper initCode for factory deployment");
+            println!("  - Set the predicted address as sender");
+            println!("  - Handle nonce management");
+            
+            // Parse gas fees
+            let max_fee = U256::from_str_radix(max_fee_per_gas, 10)?;
+            let priority_fee = U256::from_str_radix(max_priority_fee_per_gas, 10)?;
+            
+            println!("Gas fees - Max fee: {} wei, Priority fee: {} wei", max_fee, priority_fee);
+            
+            // Create a simple UserOperation and let aa-sdk-rs handle everything
+            let user_op_request = UserOperationBuilder::new(
+                predicted_address,  // Target the predicted account address
+                U256::ZERO,         // No value transfer
+                Bytes::new()        // Empty call data for deployment
             )
-            .with_sender(wallet.address())
-            .with_nonce(U256::ZERO)
+            .with_gas_fees(max_fee, priority_fee)
             .build();
             
-            println!("✅ Smart account deployment UserOperation created with real ABI!");
-            println!("Target (Factory): {}", factory_addr);
+            println!("✅ Deployment UserOperation created!");
             println!("Predicted Account: {}", predicted_address);
-            println!("Call Data: 0x{}", hex::encode(&call_data));
+            println!("aa-sdk-rs will handle factory calls automatically");
             
-            // Optionally submit to bundler
-            println!("To deploy, submit this UserOperation to a bundler");
+            println!("🚀 Submitting deployment UserOperation to bundler...");
+            
+            // Submit using SmartAccountProvider to actually deploy the account
+            match smart_provider.send_user_operation(user_op_request, wallet.signer()).await {
+                Ok(user_op_hash) => {
+                    println!("✅ Smart account deployment initiated successfully!");
+                    println!("UserOperation Hash: {:?}", user_op_hash);
+                    println!("The account will be deployed at: {}", predicted_address);
+                    println!("You can track this deployment on the blockchain");
+                }
+                Err(e) => {
+                    println!("❌ Error deploying smart account: {}", e);
+                    println!("Make sure:");
+                    println!("  1. The bundler is running and supports eth_sendUserOperation");
+                    println!("  2. The predicted account address is funded with ETH");
+                    println!("  3. The factory contract is deployed and accessible");
+                }
+            }
         }
         Err(e) => {
             println!("❌ Error predicting smart account address: {}", e);
@@ -595,7 +646,7 @@ async fn deploy_smart_account(
     Ok(())
 }
 
-/// Deploy a new smart account with multiple owners using AAAccountFactory
+/// Deploy a new smart account with multiple owners using AAAccountFactory via bundler
 async fn deploy_multi_owner_account(
     private_key: &str,
     factory: &str,
@@ -604,7 +655,7 @@ async fn deploy_multi_owner_account(
     rpc_url: &str,
     chain_id: u64,
 ) -> Result<()> {
-    println!("Deploying new multi-owner smart account using AAAccountFactory...");
+    println!("🚀 Deploying new multi-owner smart account using AAAccountFactory via bundler...");
     
     // Create wallet from private key
     let wallet = Wallet::from_hex(private_key)?;
@@ -670,6 +721,7 @@ async fn deploy_multi_owner_account(
     match bundler_client.get_predicted_multi_owner_address(factory_addr, owner_addresses.clone(), salt_u256).await {
         Ok(predicted_address) => {
             println!("📍 Predicted multi-owner account address: {}", predicted_address);
+            println!("💡 Make sure this address is funded with ETH for gas fees");
             
             // Generate call data for createAccountWithOwners
             let provider = bundler_client.create_provider().await?;
@@ -678,36 +730,64 @@ async fn deploy_multi_owner_account(
             // Get the call data for createAccountWithOwners
             let call_data = factory_contract.createAccountWithOwners(owner_addresses.clone(), salt_u256).calldata().clone();
             
+            println!("🔧 Creating multi-owner deployment UserOperation...");
+            
+            // Create concrete provider type for aa-sdk-rs
+            let url = url::Url::parse(rpc_url)?;
+            let provider = ProviderBuilder::new().on_http(url);
+            
+            // Create SimpleAccount with proper factory address
+            let simple_account = SimpleAccount::new(
+                Arc::new(provider.clone()),
+                wallet.address(),      // Owner (EOA)
+                factory_addr,          // Factory address
+                Address::from_str("0x0000000071727De22E5E9d8BAf0edAc6f37da032")?, // EntryPoint address  
+                chain_id,
+            );
+            
+            // Create SmartAccountProvider
+            let smart_provider = SmartAccountProvider::new(provider, simple_account);
+            
             // Create a UserOperation for multi-owner deployment
-            let _user_op_request = UserOperationBuilder::new(
+            let user_op_request = UserOperationBuilder::new(
                 factory_addr,
                 U256::ZERO,
                 call_data.clone()
             )
-            .with_sender(wallet.address())
             .with_nonce(U256::ZERO)
             .build();
             
-            println!("✅ Multi-owner account deployment UserOperation created!");
+            println!("✅ Multi-owner deployment UserOperation created!");
             println!("Target (AAAccountFactory): {}", factory_addr);
             println!("Predicted Account: {}", predicted_address);
             println!("Call Data: 0x{}", hex::encode(&call_data));
             println!("Owners: {} addresses", owner_addresses.len());
             
-            // Show deployment instructions
-            println!();
-            println!("🚀 To deploy this multi-owner account:");
-            println!("1. Submit this UserOperation to a bundler");
-            println!("2. The account will be deployed with all {} owners having equal control", owner_addresses.len());
-            println!("3. Any owner can sign UserOperations for this account");
-            println!("4. Owners can add/remove other owners after deployment");
+            println!("🚀 Submitting multi-owner deployment UserOperation to bundler...");
             
-            println!();
-            println!("💡 Multi-owner features:");
-            println!("- Any owner can execute transactions");
-            println!("- Owners can add new owners (up to 10 total)");
-            println!("- Owners can remove other owners (but not themselves)");
-            println!("- Cannot remove the last owner");
+            // Submit using SmartAccountProvider to actually deploy the account
+            match smart_provider.send_user_operation(user_op_request, wallet.signer()).await {
+                Ok(user_op_hash) => {
+                    println!("✅ Multi-owner smart account deployment initiated successfully!");
+                    println!("UserOperation Hash: {:?}", user_op_hash);
+                    println!("The account will be deployed at: {}", predicted_address);
+                    println!("You can track this deployment on the blockchain");
+                    
+                    println!();
+                    println!("💡 Multi-owner features:");
+                    println!("- Any owner can execute transactions");
+                    println!("- Owners can add new owners (up to 10 total)");
+                    println!("- Owners can remove other owners (but not themselves)");
+                    println!("- Cannot remove the last owner");
+                }
+                Err(e) => {
+                    println!("❌ Error deploying multi-owner smart account: {}", e);
+                    println!("Make sure:");
+                    println!("  1. The bundler is running and supports eth_sendUserOperation");
+                    println!("  2. The predicted account address is funded with ETH");
+                    println!("  3. The AAAccountFactory contract is deployed and accessible");
+                }
+            }
         }
         Err(e) => {
             println!("❌ Error predicting multi-owner account address: {}", e);
@@ -837,7 +917,7 @@ async fn run_guided_demo(skip_prompts: bool) -> Result<()> {
     // Step 3: Deploy single-owner smart account
     println!("🏗️  Step 3: Deploy Single-Owner Smart Account");
     println!("==============================================");
-    deploy_smart_account(test_private_key, factory, salt, anvil_rpc, anvil_chain_id).await?;
+    deploy_smart_account(test_private_key, factory, salt, anvil_rpc, anvil_chain_id, "20000000000", "2000000000").await?;
     println!();
     
     if !skip_prompts {
