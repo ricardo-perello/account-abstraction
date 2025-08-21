@@ -2,12 +2,24 @@
 
 **Status**: ✅ **PRODUCTION READY** - Full bundler integration achieved & tested on Sepolia!
 
+## 🔑 **Key Architecture (IMPORTANT)**
+
+**Two Types of Accounts:**
+- **EOA (Externally Owned Account)**: Traditional wallet with private key - this is what `--private-key` refers to
+- **Smart Account**: Contract-based account deployed by factory - controlled by the EOA
+
+**How It Works:**
+1. Your `--private-key` is the **EOA private key** (traditional wallet)  
+2. This EOA **owns and controls** the smart account
+3. Smart account executes transactions **on behalf of** the EOA
+4. All CLI commands use the **EOA private key** to authorize smart account operations
+
 ## 🎯 **Essential Commands (TESTED ✅)**
 
 ### **Deploy Smart Account via Bundler**
 ```bash
 source ../.env && ./target/debug/aa-client deploy-account \
-  --private-key YOUR_PRIVATE_KEY \
+  --private-key YOUR_EOA_PRIVATE_KEY \  # Private key of EOA that will own the smart account
   --salt 0x00 \
   --chain-id 11155111 \
   --rpc-url $ALCHEMY_HTTP_SEPOLIA \
@@ -17,7 +29,7 @@ source ../.env && ./target/debug/aa-client deploy-account \
 ### **Execute Transaction via Smart Account**
 ```bash
 source ../.env && ./target/debug/aa-client submit \
-  --private-key YOUR_PRIVATE_KEY \
+  --private-key YOUR_EOA_PRIVATE_KEY \  # Private key of EOA that owns the smart account
   --target RECIPIENT_ADDRESS \
   --call-data 0x \
   --factory 0x59bcaa1BB72972Df0446FCe98798076e718E3b61 \
@@ -164,17 +176,19 @@ cast code SMART_ACCOUNT_ADDRESS --rpc-url $ALCHEMY_HTTP_SEPOLIA
 ```bash
 # This exact command worked:
 source ../.env && ./target/debug/aa-client submit \
-  --private-key 0x9ec161507ad1cfd507ae6e6bf012a66d609276782ae64f70ca41174d402d10ae \
-  --target 0xd59c5D74A376f08E3036262F1D59Be24dE138c41 \
+  --private-key 0x9ec161507ad1cfd507ae6e6bf012a66d609276782ae64f70ca41174d402d10ae \  # EOA private key
+  --target 0xd59c5D74A376f08E3036262F1D59Be24dE138c41 \  # Transaction recipient
   --call-data 0x \
   --factory 0x59bcaa1BB72972Df0446FCe98798076e718E3b61 \
   --salt 0x00 \
   --chain-id 11155111 \
   --rpc-url $ALCHEMY_HTTP_SEPOLIA \
-  --value 100000000000000
+  --value 100000000000000  # 0.0001 ETH in wei
 
+# EOA Address: 0x21D541ef2237b2a63076666651238AC8A7cde752 (derived from private key above)
+# Smart Account: 0xd710e28ecfb47f55f234513ce3be18a31974590c (controlled by the EOA)
 # Result: UserOperation Hash: 0x9decccb00e204f5273a42282e141a035fd1a35e8bebad033b32276e3c0f09eaf
-# Status: ✅ SUCCESSFUL - 0.0001 ETH transferred via smart account
+# Status: ✅ SUCCESSFUL - 0.0001 ETH transferred FROM smart account TO recipient
 ```
 
 ## 📋 **Value Reference**

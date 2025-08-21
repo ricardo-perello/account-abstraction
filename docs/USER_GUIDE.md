@@ -28,11 +28,34 @@ This is a **battle-tested ERC-4337 Account Abstraction system** that successfull
 - **Alloy**: Ethereum primitives and RPC handling
 - **Bundler**: Alchemy ERC-4337 bundler integration
 
+## 🔑 **Account Architecture (Critical Understanding)**
+
+### **Two-Account System**
+This system uses **two different types of accounts** working together:
+
+1. **EOA (Externally Owned Account)**:
+   - Traditional wallet with private key (what you're used to)
+   - This is what `--private-key` parameter refers to
+   - **Owns and controls** the smart account
+   - **Signs transactions** to authorize smart account operations
+
+2. **Smart Account (Contract Account)**:
+   - Deployed smart contract (not a traditional wallet)
+   - **No private key** - controlled by the EOA
+   - **Executes transactions** on behalf of the EOA
+   - **Receives and sends** the actual funds
+
+### **How They Work Together**
+```
+EOA (Your Private Key) → Controls → Smart Account → Executes → Transaction
+   0x21D541ef...              0xd710e28e...        Sends ETH to recipient
+```
+
 ## 🚀 **Getting Started (Tested Steps)**
 
 ### **Prerequisites**
 1. **Rust toolchain** (tested with latest stable)
-2. **Private key** with ETH for gas fees
+2. **EOA private key** with ETH for gas fees (this is your traditional wallet)
 3. **Alchemy API key** for Sepolia RPC access
 4. **Environment setup** with `.env` file
 
@@ -45,7 +68,7 @@ cargo build --release
 # 2. Setup environment
 cat > ../.env << EOF
 ALCHEMY_HTTP_SEPOLIA=https://eth-sepolia.g.alchemy.com/v2/YOUR_API_KEY
-PRIVATE_KEY=0xYOUR_PRIVATE_KEY_WITH_ETH
+PRIVATE_KEY=0xYOUR_EOA_PRIVATE_KEY_WITH_ETH  # Traditional wallet private key
 EOF
 
 # 3. Test basic functionality
@@ -57,28 +80,30 @@ EOF
 ### **1. 🏗️ Deploy Smart Account**
 ```bash
 source ../.env && ./target/debug/aa-client deploy-account \
-  --private-key $PRIVATE_KEY \
+  --private-key $PRIVATE_KEY \  # EOA private key that will own the smart account
   --salt 0x00 \
   --chain-id 11155111 \
   --rpc-url $ALCHEMY_HTTP_SEPOLIA \
   --factory 0x59bcaa1BB72972Df0446FCe98798076e718E3b61
 ```
 
-**✅ Tested Result**: Smart account deployed at `0xd710e28ecfb47f55f234513ce3be18a31974590c`  
-**Gas Used**: ~0.008 ETH  
-**Time**: ~60 seconds including bundler processing
+**✅ Tested Result**: 
+- **EOA Owner**: `0x21D541ef2237b2a63076666651238AC8A7cde752` (from the private key)
+- **Smart Account Deployed**: `0xd710e28ecfb47f55f234513ce3be18a31974590c` (controlled by EOA)
+- **Gas Used**: ~0.008 ETH (paid by smart account, authorized by EOA)
+- **Time**: ~60 seconds including bundler processing
 
 ### **2. ⚡ Execute Transaction (FIXED & TESTED)**
 ```bash
 source ../.env && ./target/debug/aa-client submit \
-  --private-key $PRIVATE_KEY \
-  --target 0xRECIPIENT_ADDRESS \
+  --private-key $PRIVATE_KEY \  # EOA private key (authorizes smart account operation)
+  --target 0xRECIPIENT_ADDRESS \  # Where to send funds FROM the smart account
   --call-data 0x \
   --factory 0x59bcaa1BB72972Df0446FCe98798076e718E3b61 \
   --salt 0x00 \
   --chain-id 11155111 \
   --rpc-url $ALCHEMY_HTTP_SEPOLIA \
-  --value 100000000000000
+  --value 100000000000000  # Amount sent FROM smart account TO recipient
 ```
 
 **✅ Tested Result**: 

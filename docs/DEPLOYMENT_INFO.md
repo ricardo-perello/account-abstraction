@@ -1,5 +1,13 @@
 # Account Abstraction Deployment Info
 
+## 🔑 **Account Architecture Overview**
+
+**IMPORTANT**: This system uses two types of accounts working together:
+- **EOA (Traditional Wallet)**: Has private key → `--private-key` parameter refers to this
+- **Smart Account (Contract)**: Deployed by factory → Controlled by the EOA → Executes transactions
+
+**Transaction Flow**: `EOA Private Key → Signs → Smart Account → Executes → Target`
+
 ## 🌐 Live Network Deployments
 
 ### **Sepolia Testnet (TESTED & VERIFIED ✅)**
@@ -62,25 +70,31 @@ source ../.env
 
 # Deploy smart account via bundler
 ./target/debug/aa-client deploy-account \
-  --private-key YOUR_PRIVATE_KEY \
+  --private-key YOUR_EOA_PRIVATE_KEY \  # Traditional wallet private key (will own smart account)
   --salt 0x00 \
   --chain-id 11155111 \
   --rpc-url $ALCHEMY_HTTP_SEPOLIA \
   --factory 0x59bcaa1BB72972Df0446FCe98798076e718E3b61
+
+# Result: 
+# - EOA (your traditional wallet) controls the deployed smart account
+# - Smart account can now execute transactions on behalf of your EOA
 ```
 
 ### **Submit Transaction (Sepolia)**
 ```bash
 # Execute transaction through smart account
 ./target/debug/aa-client submit \
-  --private-key YOUR_PRIVATE_KEY \
-  --target 0xRECIPIENT_ADDRESS \
+  --private-key YOUR_EOA_PRIVATE_KEY \  # EOA private key (authorizes smart account operation)
+  --target 0xRECIPIENT_ADDRESS \        # Transaction recipient  
   --call-data 0x \
   --factory 0x59bcaa1BB72972Df0446FCe98798076e718E3b61 \
   --salt 0x00 \
   --chain-id 11155111 \
   --rpc-url $ALCHEMY_HTTP_SEPOLIA \
-  --value 100000000000000
+  --value 100000000000000              # Amount sent FROM smart account TO recipient
+
+# Flow: EOA signs → Smart Account executes → Recipient receives ETH
 ```
 
 ### **Predict Account Address**
