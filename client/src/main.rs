@@ -74,44 +74,7 @@ enum Commands {
         max_priority_fee_per_gas: String,
     },
     
-    /// Estimate gas for a UserOperation
-    Estimate {
-        /// Private key in hex format
-        #[arg(short, long)]
-        private_key: String,
-        
-        /// Target contract address
-        #[arg(short, long)]
-        target: String,
-        
-        /// Call data (hex string)
-        #[arg(short = 'd', long)]
-        call_data: String,
-        
-        /// Nonce value
-        #[arg(short, long)]
-        nonce: u64,
-        
-        /// RPC URL for the network
-        #[arg(short, long, default_value = "http://localhost:8545")]
-        rpc_url: String,
-        
-        /// Entry point contract address
-        #[arg(short, long, default_value = "0x0000000071727De22E5E9d8BAf0edAc6f37da032")]
-        entry_point: String,
-        
-        /// Chain ID
-        #[arg(short, long, default_value = "31337")]
-        chain_id: u64,
-        
-        /// Maximum fee per gas (in wei)
-        #[arg(long, default_value = "20000000000")]
-        max_fee_per_gas: String,
-        
-        /// Maximum priority fee per gas (in wei)
-        #[arg(long, default_value = "2000000000")]
-        max_priority_fee_per_gas: String,
-    },
+
     
     /// Submit a UserOperation to a bundler (for arbitrary transactions)
     Submit {
@@ -251,12 +214,7 @@ enum Commands {
         private_key: String,
     },
     
-    /// Run guided demo with Anvil deployed contracts
-    Demo {
-        /// Skip confirmation prompts
-        #[arg(short, long)]
-        yes: bool,
-    },
+
     
     /// Show network presets and configuration
     Networks,
@@ -270,9 +228,7 @@ async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
         Commands::Create { private_key, target, call_data, nonce, rpc_url, entry_point, chain_id, max_fee_per_gas, max_priority_fee_per_gas } => {
             create_user_operation(private_key, target, call_data, *nonce, rpc_url, entry_point, *chain_id, max_fee_per_gas, max_priority_fee_per_gas).await?;
         }
-        Commands::Estimate { private_key, target, call_data, nonce, rpc_url, entry_point, chain_id, max_fee_per_gas, max_priority_fee_per_gas } => {
-            estimate_gas(private_key, target, call_data, *nonce, rpc_url, entry_point, *chain_id, max_fee_per_gas, max_priority_fee_per_gas).await?;
-        }
+
         Commands::Submit { private_key, target, call_data, factory, salt, rpc_url, entry_point: _, chain_id, value, max_fee_per_gas, max_priority_fee_per_gas } => {
             submit_user_operation_fixed(private_key, target, call_data, value, factory, salt, rpc_url, *chain_id, max_fee_per_gas, max_priority_fee_per_gas).await?;
         }
@@ -291,9 +247,7 @@ async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
         Commands::Info { private_key } => {
             show_wallet_info(private_key)?;
         }
-        Commands::Demo { yes } => {
-            run_guided_demo(*yes).await?;
-        }
+
         Commands::Networks => {
             show_network_presets()?;
         }
@@ -345,60 +299,7 @@ async fn create_user_operation(
     Ok(())
 }
 
-async fn estimate_gas(
-    private_key: &str,
-    target: &str,
-    _call_data: &str,
-    _nonce: u64,
-    rpc_url: &str,
-    entry_point: &str,
-    chain_id: u64,
-    _max_fee_per_gas: &str,
-    _max_priority_fee_per_gas: &str,
-) -> Result<()> {
-    println!("Estimating gas using aa-sdk-rs SmartAccountProvider...");
-    
-    // Create wallet and parse parameters
-    let wallet = Wallet::from_hex(private_key)?;
-    let target_addr = Address::from_str(target)?;
-    let entry_point_addr = Address::from_str(entry_point)?;
-    
-    println!("Creating SmartAccountProvider and SimpleAccount...");
-    println!("Target: {}", target_addr);
-    println!("Entry Point: {}", entry_point_addr);
-    
-    // Create concrete provider type
-    let url = url::Url::parse(rpc_url)?;
-    let provider = ProviderBuilder::new().on_http(url);
-    
-    // Use the deployed factory address for Sepolia or local
-    let factory_addr = if chain_id == 11155111 {
-        Address::from_str("0x59bcaa1BB72972Df0446FCe98798076e718E3b61")? // Your deployed AAAccountFactory on Sepolia
-    } else {
-        Address::from_str("0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512")? // Anvil factory
-    };
-    let _simple_account = SimpleAccount::new(
-        Arc::new(provider.clone()),
-        wallet.address(),      // Owner (EOA)
-        factory_addr,          // Factory address
-        entry_point_addr,      // EntryPoint address  
-        chain_id,
-    );
-    
-        // Gas estimation via bundler has compatibility issues with aa-sdk-rs
-    // Provide estimated values based on typical ERC-4337 operations
-    println!("⚠️  Gas estimation via bundler has compatibility issues");
-    println!("📊 Using estimated gas values based on typical ERC-4337 operations:");
-    println!("  Pre-verification gas: ~21000 wei (typical)");
-    println!("  Verification gas limit: ~100000 wei (account validation)");
-    println!("  Call gas limit: ~21000 wei (basic transfer)");
-    println!("  Total estimated gas: ~142000 wei");
-    println!();
-    println!("💡 For accurate gas estimation, use the submit command which works correctly");
-    println!("   The submit command successfully interacts with the bundler");
-    
-    Ok(())
-}
+
 
 /// Submit a UserOperation to a bundler using aa-sdk-rs SmartAccountProvider (FIXED VERSION)
 async fn submit_user_operation_fixed(
@@ -943,122 +844,6 @@ async fn predict_smart_account_address(
             println!("Make sure the factory contract is deployed and the RPC URL is correct");
         }
     }
-    
-    Ok(())
-}
-
-/// Run a guided demo with the deployed Anvil contracts
-async fn run_guided_demo(skip_prompts: bool) -> Result<()> {
-    use std::io::BufRead;
-    
-    println!("🚀 AA Client Demo with Anvil Deployed Contracts");
-    println!("================================================");
-    println!();
-    
-    // Anvil constants - clean deployment with deterministic addresses
-    let anvil_rpc = "http://localhost:8545";
-    let anvil_chain_id = 31337u64;
-    let entry_point = "0x0000000071727De22E5E9d8BAf0edAc6f37da032";
-    let factory = "0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512";
-    
-    // Test account from Anvil (Owner1)
-    let test_private_key = "0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d";
-    let test_address = "0x70997970C51812dc3A010C7d01b50e0d17dc79C8";
-    
-    println!("📊 Network Information:");
-    println!("  RPC URL: {}", anvil_rpc);
-    println!("  Chain ID: {}", anvil_chain_id);
-    println!("  EntryPoint: {}", entry_point);
-    println!("  Factory: {}", factory);
-    println!();
-    
-    println!("🔑 Test Account:");
-    println!("  Address: {}", test_address);
-    println!("  Private Key: {}", test_private_key);
-    println!();
-    
-    if !skip_prompts {
-        println!("Press Enter to continue with the demo...");
-        let stdin = std::io::stdin();
-        let _ = stdin.lock().read_line(&mut String::new())?;
-    }
-    
-    // Step 1: Show wallet info
-    println!("📋 Step 1: Wallet Information");
-    println!("==============================");
-    show_wallet_info(test_private_key)?;
-    println!();
-    
-    if !skip_prompts {
-        println!("Press Enter to continue...");
-        let stdin = std::io::stdin();
-        let _ = stdin.lock().read_line(&mut String::new())?;
-    }
-    
-    // Step 2: Predict smart account address
-    println!("🔮 Step 2: Predict Smart Account Address");
-    println!("=========================================");
-    let salt = "0x123456";
-    predict_smart_account_address(factory, test_address, salt, anvil_rpc, anvil_chain_id).await?;
-    println!();
-    
-    if !skip_prompts {
-        println!("Press Enter to continue...");
-        let stdin = std::io::stdin();
-        let _ = stdin.lock().read_line(&mut String::new())?;
-    }
-    
-    // Step 3: Deploy single-owner smart account
-    println!("🏗️  Step 3: Deploy Single-Owner Smart Account");
-    println!("==============================================");
-    deploy_smart_account(test_private_key, factory, salt, anvil_rpc, anvil_chain_id, "20000000000", "2000000000").await?;
-    println!();
-    
-    if !skip_prompts {
-        println!("Press Enter to continue...");
-        let stdin = std::io::stdin();
-        let _ = stdin.lock().read_line(&mut String::new())?;
-    }
-    
-    // Step 4: Deploy multi-owner smart account
-    println!("👥 Step 4: Deploy Multi-Owner Smart Account (AAAccount)");
-    println!("========================================================");
-    println!("Note: This requires AAAccountFactory (not SimpleAccountFactory)");
-    let owners = format!("{},0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC", test_address);
-    let multi_salt = "0x654321";
-    // For demo purposes, we'll show what would happen with the proper factory
-    println!("Demo with AAAccountFactory deployment:");
-    deploy_multi_owner_account(test_private_key, factory, &owners, multi_salt, anvil_rpc, anvil_chain_id).await?;
-    println!();
-    
-    if !skip_prompts {
-        println!("Press Enter to continue...");
-        let stdin = std::io::stdin();
-        let _ = stdin.lock().read_line(&mut String::new())?;
-    }
-    
-    // Step 5: Create UserOperation
-    println!("⚡ Step 5: Create UserOperation");
-    println!("===============================");
-    let target = "0x0000000000000000000000000000000000000000"; // null address for demo
-    let call_data = "0x";
-    let nonce = 0u64;
-    create_user_operation(test_private_key, target, call_data, nonce, anvil_rpc, entry_point, anvil_chain_id, "20000000000", "2000000000").await?;
-    println!();
-    
-    println!("✅ Demo Complete!");
-    println!("================");
-    println!();
-    println!("🔧 To interact with the deployed contracts manually:");
-    println!("  1. Use the deployed addresses shown above");
-    println!("  2. Use test accounts from Anvil for transactions");
-    println!("  3. Check DEPLOYMENT_INFO.md for more examples");
-    println!();
-    println!("📚 Example commands:");
-    println!("  aa-client info -p {}", test_private_key);
-    println!("  aa-client predict-address -f {} -o {} -s {}", factory, test_address, salt);
-    println!("  aa-client deploy-account -p {} -s {}", test_private_key, salt);
-    println!();
     
     Ok(())
 }
