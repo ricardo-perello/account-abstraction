@@ -21,7 +21,6 @@ use config::list_supported_networks;
 use aa_sdk_rs::{
     smart_account::{SimpleAccount, SmartAccount},
     provider::{SmartAccountProvider, SmartAccountProviderTrait},
-    types::request::ExecuteCall,
 };
 use alloy::providers::ProviderBuilder;
 use std::sync::Arc;
@@ -452,7 +451,7 @@ async fn submit_user_operation_fixed(
     let account_addr = simple_account.get_account_address().await?;
     println!("✅ Using deployed smart account: {}", account_addr);
     
-    // ✅ 2. ENCODE TRANSACTION PROPERLY
+    // ✅ 2. PREPARE TRANSACTION PARAMETERS  
     let call_data_bytes = if call_data.starts_with("0x") {
         Bytes::from_str(call_data)?
     } else {
@@ -460,27 +459,26 @@ async fn submit_user_operation_fixed(
     };
     let value_amount = U256::from_str_radix(value, 10)?;
     
-    println!("🔧 Encoding transaction for smart account execution...");
+    println!("🔧 Preparing transaction for smart account execution...");
     println!("  External target: {}", target_addr);
     println!("  Value to send: {} wei", value_amount);
     println!("  Call data: 0x{}", hex::encode(&call_data_bytes));
     
-    let execute_call = ExecuteCall::new(target_addr, value_amount, call_data_bytes);
-    let encoded_call_data = simple_account.encode_execute(execute_call).await?;
-    
-    println!("✅ Transaction encoded as smart account execute() call");
-    
-    // ✅ 3. CREATE PROPER USEROPERATION
+    // ✅ 3. CREATE USEROPERATION DIRECTLY (NO DOUBLE-ENCODING!)
     let max_fee = U256::from_str_radix(max_fee_per_gas, 10)?;
     let priority_fee = U256::from_str_radix(max_priority_fee_per_gas, 10)?;
     
+    // Fix: Pass target parameters directly to UserOperationBuilder
+    // This will create ExecuteCall internally - no manual encoding needed!
     let mut user_op_request = UserOperationBuilder::new(
-        account_addr,                    // ✅ Smart account as sender
-        U256::ZERO,                      // ✅ No direct value transfer
-        Bytes::from(encoded_call_data)   // ✅ Encoded execute() call
+        target_addr,        // ✅ External target (not smart account!)
+        value_amount,       // ✅ Value to send to target
+        call_data_bytes     // ✅ Call data to send to target
     )
     .with_gas_fees(max_fee, priority_fee)
     .build();
+    
+    println!("✅ UserOperation created correctly (no double-encoding)");
     
     // ✅ 4. USE AA-SDK-RS CAPABILITIES
     let smart_provider = SmartAccountProvider::new(provider, simple_account);
