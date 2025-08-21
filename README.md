@@ -99,7 +99,7 @@ CLI Command → main.rs → Module Selection
 - **Full ERC-4337 Flow** - UserOperation submission working via aa-sdk-rs
 
 ### 🚧 **What Requires Bundler (Missing Ingredient)**
-- **Gas Estimation** - `eth_estimateUserOperationGas` RPC method
+- **Gas Estimation** - Integrated into `submit` command for real-time cost estimates
 - **UserOperation Submission** - `eth_sendUserOperation` RPC method
 - **Transaction Execution via EntryPoint** - True ERC-4337 flow
 - **Paymaster Integration** - Sponsored transactions
@@ -133,27 +133,25 @@ cd ../client
 cargo build --release
 ```
 
-### **2. Run Complete Demo**
+### **2. Quick Start Example**
 
 ```bash
-# Run guided demo (tests everything)
-./target/release/aa-client demo --yes
-```
+# Generate a wallet for testing
+./target/release/aa-client generate-wallet
 
-**Demo Output:**
-```
-🚀 AA Client Demo with Anvil Deployed Contracts
-================================================
+# Predict where your smart account will be deployed
+./target/release/aa-client predict-address \
+  --factory 0x59bcaa1BB72972Df0446FCe98798076e718E3b61 \
+  --owner YOUR_WALLET_ADDRESS \
+  --salt 0x00
 
-📊 Network Information:
-  RPC URL: http://localhost:8545
-  Chain ID: 31337
-  EntryPoint: 0x5FbDB2315678afecb367f032d93F642f64180aa3
-  Factory: 0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512
-
-✅ Real Predicted Address: 0xa02dF2bb5923168422eB949BC980A8967Ff1964F
-✅ Smart account deployment UserOperation created with real ABI!
-✅ Multi-owner account deployment UserOperation created!
+# Deploy smart account (requires funded predicted address)
+./target/release/aa-client deploy-account \
+  --private-key YOUR_PRIVATE_KEY \
+  --factory 0x59bcaa1BB72972Df0446FCe98798076e718E3b61 \
+  --salt 0x00 \
+  --chain-id 11155111 \
+  --rpc-url YOUR_RPC_URL
 ```
 
 ## 📖 **Detailed Testing Results**
@@ -208,15 +206,13 @@ cast send --rpc-url http://localhost:8545 \
 
 | Command | Status | Description | Bundler Required |
 |---------|---------|-------------|------------------|
-| `demo --yes` | ✅ Working | Complete guided walkthrough | No |
 | `generate-wallet` | ✅ Working | Create random wallet | No |
 | `info -p KEY` | ✅ Working | Show wallet information | No |
 | `predict-address` | ✅ Working | Get predicted smart account address | No |
-| `deploy-account` | ✅ Working | Generate deployment UserOperation | No |
-| `deploy-multi-owner-account` | ✅ Working | Generate multi-owner UserOperation | No |
+| `deploy-account` | ✅ Working | Deploy smart account via bundler | Yes |
+| `deploy-multi-owner-account` | ✅ Working | Deploy multi-owner account via bundler | Yes |
 | `create` | ✅ Working | Create UserOperation structure | No |
-| `estimate` | ✅ Working | Estimate gas for UserOperation | No |
-| `submit` | ✅ Working | Submit UserOperation to bundler | No |
+| `submit` | ✅ Working | Submit UserOperation to bundler (includes gas estimation) | Yes |
 | `networks` | ✅ Working | Show network presets | No |
 
 ### **Working CLI Examples**
@@ -259,14 +255,15 @@ cast send --rpc-url http://localhost:8545 \
   -r https://eth-sepolia.g.alchemy.com/v2/YOUR_API_KEY \
   --chain-id 11155111
 
-# Test gas estimation (requires bundler)
-./target/release/aa-client estimate \
-  -p YOUR_PRIVATE_KEY \
-  -t 0x0000000000000000000000000000000000000000 \
-  -d 0x \
-  -n 0 \
-  -r https://eth-sepolia.g.alchemy.com/v2/YOUR_API_KEY \
-  --chain-id 11155111
+# Submit transaction (includes automatic gas estimation)
+./target/release/aa-client submit \
+  --private-key YOUR_PRIVATE_KEY \
+  --target 0xd59c5D74A376f08E3036262F1D59Be24dE138c41 \
+  --call-data 0x \
+  --factory 0x59bcaa1BB72972Df0446FCe98798076e718E3b61 \
+  --salt 0x00 \
+  --chain-id 11155111 \
+  --rpc-url YOUR_RPC_URL
 ```
 
 ## 🏗️ **Smart Contract Architecture**
@@ -362,7 +359,7 @@ For production deployment:
 
 ### **Bundler Requirements**
 For full ERC-4337 flow, you need a bundler that supports:
-- `eth_estimateUserOperationGas` - Gas estimation
+- `eth_estimateUserOperationGas` - Gas estimation (used within submit command)
 - `eth_sendUserOperation` - UserOperation submission
 - `eth_getUserOperationReceipt` - Transaction tracking
 

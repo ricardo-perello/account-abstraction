@@ -149,9 +149,6 @@ source ../.env && ./target/debug/aa-client predict-address \
 
 # Show network configurations
 ./target/debug/aa-client networks
-
-# Run guided demo
-./target/debug/aa-client demo --yes
 ```
 
 ## 🌐 **Network Configurations (Tested)**
