@@ -757,71 +757,112 @@ async fn deploy_multi_owner_account(
         hex::decode(salt)?
     };
     
-    // Convert salt bytes to U256
+    println!("Salt: 0x{}", hex::encode(&salt_bytes));
+    println!("⚠️  Note: Salt will be handled by aa-sdk-rs automatically");
+    
+    println!("🔧 Setting up aa-sdk-rs for multi-owner deployment...");
+    
+    // Create concrete provider type for aa-sdk-rs
+    let url = url::Url::parse(rpc_url)?;
+    let provider = ProviderBuilder::new().on_http(url);
+    
+    // ⚠️ LIMITATION: aa-sdk-rs SimpleAccount doesn't support multi-owner natively
+    // Using first owner as primary owner, factory must handle multi-owner logic
+    let primary_owner = owner_addresses[0];
+    let simple_account = SimpleAccount::new(
+        Arc::new(provider.clone()),
+        primary_owner,         // Primary owner from the list
+        factory_addr,          // AAAccountFactory address  
+        Address::from_str("0x0000000071727De22E5E9d8BAf0edAc6f37da032")?, // EntryPoint address
+        chain_id,
+    );
+    
+    println!("📋 Primary owner (for aa-sdk-rs): {}", primary_owner);
+    println!("📋 Total owners requested: {} addresses", owner_addresses.len());
+    for (i, owner) in owner_addresses.iter().enumerate() {
+        println!("  Owner {}: {}", i + 1, owner);
+    }
+    
+    // ✅ Get predicted address BEFORE moving simple_account into provider
+    let predicted_address = simple_account.get_counterfactual_address().await?;
+    println!("📍 aa-sdk-rs predicted address: {}", predicted_address);
+    println!("💡 Make sure this address is funded with ETH for gas fees");
+    println!("⚠️  Note: This is single-owner prediction, multi-owner may require custom handling");
+    
+    // Create SmartAccountProvider (this moves simple_account)
+    let smart_provider = SmartAccountProvider::new(provider, simple_account);
+    
+    // Parse gas fees
+    let max_fee = U256::from_str_radix("20000000000", 10)?; // 20 gwei
+    let priority_fee = U256::from_str_radix("2000000000", 10)?; // 2 gwei
+    
+    println!("🔧 Creating deployment UserOperation...");
+    println!("📊 aa-sdk-rs will automatically:");
+    println!("  - Detect that the account doesn't exist");
+    println!("  - Generate initCode for factory deployment");
+    println!("  - Set the predicted address as sender");
+    println!("  - Handle nonce management");
+    
+    // ✅ FIXED: Generate multi-owner initCode manually
+    println!("🔧 Generating custom initCode for multi-owner deployment...");
+    
+    // Recreate bundler client and provider for factory interactions
+    let bundler_client = BundlerClient::new(
+        rpc_url.to_string(),
+        Address::from_str("0x0000000071727De22E5E9d8BAf0edAc6f37da032")?,
+        U256::from(chain_id),
+    );
+    
+    // Convert salt bytes to U256 for factory call
     let mut salt_array = [0u8; 32];
     let start_idx = 32usize.saturating_sub(salt_bytes.len());
     salt_array[start_idx..].copy_from_slice(&salt_bytes[..32.min(salt_bytes.len())]);
     let salt_u256 = U256::from_be_bytes(salt_array);
     
-    println!("Salt: 0x{}", hex::encode(&salt_bytes));
+    // Get the actual predicted address for multi-owner deployment
+    let actual_predicted_address = bundler_client.get_predicted_multi_owner_address(factory_addr, owner_addresses.clone(), salt_u256).await?;
+    println!("📍 Real multi-owner predicted address: {}", actual_predicted_address);
+    println!("💡 Make sure THIS address is funded with ETH: {}", actual_predicted_address);
     
-    // Create bundler client for contract interactions
-    let bundler_client = BundlerClient::new(
-        rpc_url.to_string(),
-        Address::from_str("0x0000000071727De22E5E9d8BAf0edAc6f37da032")?, // Default entry point
-        U256::from(chain_id),
-    );
+    // Generate call data for createAccountWithOwners
+    let factory_provider = bundler_client.create_provider().await?;
+    let factory_contract = bundler::AAAccountFactory::new(factory_addr, &factory_provider);
+    let factory_call_data = factory_contract.createAccountWithOwners(owner_addresses.clone(), salt_u256).calldata().clone();
     
-    // First, get the predicted address for multi-owner account
-    match bundler_client.get_predicted_multi_owner_address(factory_addr, owner_addresses.clone(), salt_u256).await {
-        Ok(predicted_address) => {
-            println!("📍 Predicted multi-owner account address: {}", predicted_address);
-            println!("💡 Make sure this address is funded with ETH for gas fees");
-            
-            // Generate call data for createAccountWithOwners
-            let provider = bundler_client.create_provider().await?;
-            let factory_contract = bundler::AAAccountFactory::new(factory_addr, &provider);
-            
-            // Get the call data for createAccountWithOwners
-            let call_data = factory_contract.createAccountWithOwners(owner_addresses.clone(), salt_u256).calldata().clone();
-            
-            println!("🔧 Creating multi-owner deployment UserOperation...");
-            
-            // Create concrete provider type for aa-sdk-rs
-            let url = url::Url::parse(rpc_url)?;
-            let provider = ProviderBuilder::new().on_http(url);
-            
-            // Create SimpleAccount with proper factory address
-            let simple_account = SimpleAccount::new(
-                Arc::new(provider.clone()),
-                wallet.address(),      // Owner (EOA)
-                factory_addr,          // Factory address
-                Address::from_str("0x0000000071727De22E5E9d8BAf0edAc6f37da032")?, // EntryPoint address  
-                chain_id,
-            );
-            
-            // Create SmartAccountProvider
-            let smart_provider = SmartAccountProvider::new(provider, simple_account);
-            
-            // Create a UserOperation for multi-owner deployment
-            let user_op_request = UserOperationBuilder::new(
-                factory_addr,
-                U256::ZERO,
-                call_data.clone()
-            )
-            .with_nonce(U256::ZERO)
-            .build();
-            
-            println!("✅ Multi-owner deployment UserOperation created!");
-            println!("Target (AAAccountFactory): {}", factory_addr);
-            println!("Predicted Account: {}", predicted_address);
-            println!("Call Data: 0x{}", hex::encode(&call_data));
-            println!("Owners: {} addresses", owner_addresses.len());
-            
-            println!("🚀 Submitting multi-owner deployment UserOperation to bundler...");
-            
-            // Submit using SmartAccountProvider to actually deploy the account
-            match smart_provider.send_user_operation(user_op_request, wallet.signer()).await {
+    // Create custom initCode: factory_address + encoded_function_call
+    let mut init_code = Vec::new();
+    init_code.extend_from_slice(factory_addr.as_slice());
+    init_code.extend_from_slice(&factory_call_data);
+    
+    println!("✅ Custom initCode generated for {} owners", owner_addresses.len());
+    println!("🔍 InitCode: 0x{}", hex::encode(&init_code));
+    
+    // Create UserOperation with multi-owner settings
+    let mut user_op_request = UserOperationBuilder::new(
+        actual_predicted_address,  // ✅ Real multi-owner predicted address
+        U256::ZERO,               // No direct value transfer
+        Bytes::new()              // Empty call data for deployment
+    )
+    .with_gas_fees(max_fee, priority_fee)
+    .build();
+    
+    // ✅ CRITICAL: Set factory and factory_data for multi-owner deployment
+            user_op_request.factory = Some(factory_addr);
+        user_op_request.factory_data = Some(Bytes::from(factory_call_data));
+        // CRITICAL: Override sender to use multi-owner predicted address, not aa-sdk-rs single-owner prediction
+        user_op_request.sender = Some(actual_predicted_address);
+        // CRITICAL: For new account deployment, nonce must be 0
+        user_op_request.nonce = Some(U256::ZERO);
+    
+    println!("✅ Multi-owner deployment UserOperation created!");
+    println!("Target Account: {}", actual_predicted_address);
+    println!("Custom initCode set for multi-owner factory deployment");
+    println!("🔍 InitCode contains {} owners", owner_addresses.len());
+    
+    println!("🚀 Submitting multi-owner deployment UserOperation to bundler...");
+    
+    // Submit using the same pattern as working deploy-account
+    match smart_provider.send_user_operation(user_op_request, wallet.signer()).await {
                 Ok(user_op_hash) => {
                     println!("✅ Multi-owner smart account deployment initiated successfully!");
                     println!("UserOperation Hash: {:?}", user_op_hash);
@@ -829,27 +870,25 @@ async fn deploy_multi_owner_account(
                     println!("You can track this deployment on the blockchain");
                     
                     println!();
-                    println!("💡 Multi-owner features:");
+                    println!();
+                    println!("💡 Expected multi-owner features (if factory supports it):");
                     println!("- Any owner can execute transactions");
                     println!("- Owners can add new owners (up to 10 total)");
                     println!("- Owners can remove other owners (but not themselves)");
                     println!("- Cannot remove the last owner");
+                    println!();
+                    println!("⚠️  Note: This deployment used single-owner aa-sdk-rs pattern");
+                    println!("   The actual multi-owner logic depends on factory implementation");
                 }
                 Err(e) => {
-                    println!("❌ Error deploying multi-owner smart account: {}", e);
+                    println!("❌ Error deploying smart account: {}", e);
                     println!("Make sure:");
                     println!("  1. The bundler is running and supports eth_sendUserOperation");
-                    println!("  2. The predicted account address is funded with ETH");
+                    println!("  2. The predicted account address is funded with ETH");  
                     println!("  3. The AAAccountFactory contract is deployed and accessible");
+                    println!("  4. Factory supports single-owner deployment pattern for primary owner");
                 }
             }
-        }
-        Err(e) => {
-            println!("❌ Error predicting multi-owner account address: {}", e);
-            println!("Make sure the AAAccountFactory contract is deployed and accessible");
-            println!("The factory should support createAccountWithOwners function");
-        }
-    }
     
     Ok(())
 }
