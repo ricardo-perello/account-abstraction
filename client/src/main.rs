@@ -19,8 +19,9 @@ use config::list_supported_networks;
 
 // aa-sdk-rs integration - using SmartAccountProvider properly
 use aa_sdk_rs::{
-    smart_account::SimpleAccount,
+    smart_account::{SimpleAccount, SmartAccount},
     provider::{SmartAccountProvider, SmartAccountProviderTrait},
+    types::request::ExecuteCall,
 };
 use alloy::providers::ProviderBuilder;
 use std::sync::Arc;
@@ -127,9 +128,13 @@ enum Commands {
         #[arg(short = 'd', long)]
         call_data: String,
         
-        /// Nonce value
+        /// Factory contract address (needed to identify smart account)
+        #[arg(short, long, default_value = "0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512")]
+        factory: String,
+        
+        /// Salt for deterministic deployment (hex string, needed to identify smart account)
         #[arg(short, long)]
-        nonce: u64,
+        salt: String,
         
         /// RPC URL for the network
         #[arg(short, long, default_value = "http://localhost:8545")]
@@ -269,8 +274,8 @@ async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
         Commands::Estimate { private_key, target, call_data, nonce, rpc_url, entry_point, chain_id, max_fee_per_gas, max_priority_fee_per_gas } => {
             estimate_gas(private_key, target, call_data, *nonce, rpc_url, entry_point, *chain_id, max_fee_per_gas, max_priority_fee_per_gas).await?;
         }
-        Commands::Submit { private_key, target, call_data, nonce, rpc_url, entry_point, chain_id, value, max_fee_per_gas, max_priority_fee_per_gas } => {
-            submit_user_operation(private_key, target, call_data, *nonce, rpc_url, entry_point, *chain_id, value, max_fee_per_gas, max_priority_fee_per_gas).await?;
+        Commands::Submit { private_key, target, call_data, factory, salt, rpc_url, entry_point: _, chain_id, value, max_fee_per_gas, max_priority_fee_per_gas } => {
+            submit_user_operation_fixed(private_key, target, call_data, value, factory, salt, rpc_url, *chain_id, max_fee_per_gas, max_priority_fee_per_gas).await?;
         }
         Commands::DeployAccount { private_key, factory, salt, rpc_url, chain_id, max_fee_per_gas, max_priority_fee_per_gas } => {
             deploy_smart_account(private_key, factory, salt, rpc_url, *chain_id, max_fee_per_gas, max_priority_fee_per_gas).await?;
@@ -396,94 +401,146 @@ async fn estimate_gas(
     Ok(())
 }
 
-/// Submit a UserOperation to a bundler using aa-sdk-rs SmartAccountProvider
-async fn submit_user_operation(
+/// Submit a UserOperation to a bundler using aa-sdk-rs SmartAccountProvider (FIXED VERSION)
+async fn submit_user_operation_fixed(
     private_key: &str,
     target: &str,
     call_data: &str,
-    nonce: u64,
-    rpc_url: &str,
-    entry_point: &str,
-    chain_id: u64,
     value: &str,
+    factory: &str,      // ✅ Added: Need to identify smart account
+    salt: &str,         // ✅ Added: Need to identify smart account
+    rpc_url: &str,
+    chain_id: u64,
     max_fee_per_gas: &str,
     max_priority_fee_per_gas: &str,
 ) -> Result<()> {
-    println!("Submitting UserOperation using aa-sdk-rs SmartAccountProvider...");
+    println!("🚀 Submitting transaction via smart account using aa-sdk-rs...");
     
-    // Create wallet and parse parameters
+    // ✅ Setup
     let wallet = Wallet::from_hex(private_key)?;
+    let factory_addr = Address::from_str(factory)?;
     let target_addr = Address::from_str(target)?;
-    let entry_point_addr = Address::from_str(entry_point)?;
+    let entry_point_addr = Address::from_str("0x0000000071727De22E5E9d8BAf0edAc6f37da032")?;
+    
+    println!("🔧 Setting up aa-sdk-rs SmartAccount...");
+    println!("Factory: {}", factory_addr);
+    println!("Target: {}", target_addr);
+    println!("Owner EOA: {}", wallet.address());
+    
+    let url = url::Url::parse(rpc_url)?;
+    let provider = ProviderBuilder::new().on_http(url);
+    
+    let simple_account = SimpleAccount::new(
+        Arc::new(provider.clone()),
+        wallet.address(),
+        factory_addr,
+        entry_point_addr,
+        chain_id,
+    );
+    
+    // ✅ 1. CHECK IF ACCOUNT IS DEPLOYED
+    println!("🔍 Checking if smart account is deployed...");
+    let is_deployed = simple_account.is_account_deployed().await?;
+    if !is_deployed {
+        let predicted_addr = simple_account.get_counterfactual_address().await?;
+        return Err(anyhow::anyhow!(
+            "❌ Smart account not deployed at {}!\n💡 Run deploy-account first with:\n  cargo run -- deploy-account --factory {} --salt {} --private-key {}",
+            predicted_addr, factory, salt, private_key
+        ));
+    }
+    
+    let account_addr = simple_account.get_account_address().await?;
+    println!("✅ Using deployed smart account: {}", account_addr);
+    
+    // ✅ 2. ENCODE TRANSACTION PROPERLY
     let call_data_bytes = if call_data.starts_with("0x") {
         Bytes::from_str(call_data)?
     } else {
         Bytes::from_str(&format!("0x{}", call_data))?
     };
-    
-    println!("Creating SmartAccountProvider and SimpleAccount...");
-    println!("Target: {}", target_addr);
-    println!("Entry Point: {}", entry_point_addr);
-    
-    // Create concrete provider type  
-    let url = url::Url::parse(rpc_url)?;
-    let provider = ProviderBuilder::new().on_http(url);
-    
-    // Use the deployed factory address for Sepolia or local
-    let factory_addr = if chain_id == 11155111 {
-        Address::from_str("0x59bcaa1BB72972Df0446FCe98798076e718E3b61")? // Your deployed AAAccountFactory on Sepolia
-    } else {
-        Address::from_str("0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512")? // Anvil factory
-    };
-    
-    // Create SimpleAccount with proper factory address
-    // Note: Using SimpleAccount even with AAAccountFactory since the core interface is compatible
-    let simple_account = SimpleAccount::new(
-        Arc::new(provider.clone()),
-        wallet.address(),      // Owner (EOA)
-        factory_addr,          // Factory address
-        entry_point_addr,      // EntryPoint address  
-        chain_id,
-    );
-    
-    // Create SmartAccountProvider
-    let smart_provider = SmartAccountProvider::new(provider, simple_account);
-    
-    // Parse value and gas fees
     let value_amount = U256::from_str_radix(value, 10)?;
+    
+    println!("🔧 Encoding transaction for smart account execution...");
+    println!("  External target: {}", target_addr);
+    println!("  Value to send: {} wei", value_amount);
+    println!("  Call data: 0x{}", hex::encode(&call_data_bytes));
+    
+    let execute_call = ExecuteCall::new(target_addr, value_amount, call_data_bytes);
+    let encoded_call_data = simple_account.encode_execute(execute_call).await?;
+    
+    println!("✅ Transaction encoded as smart account execute() call");
+    
+    // ✅ 3. CREATE PROPER USEROPERATION
     let max_fee = U256::from_str_radix(max_fee_per_gas, 10)?;
     let priority_fee = U256::from_str_radix(max_priority_fee_per_gas, 10)?;
     
-    println!("Transaction value: {} wei", value_amount);
-    println!("Gas fees - Max fee: {} wei, Priority fee: {} wei", max_fee, priority_fee);
-    
-    // Create a UserOperation using our builder
-    // Let aa-sdk-rs automatically determine sender and initCode for deployment
-    let user_op_request = UserOperationBuilder::new(
-        target_addr,
-        value_amount,  // Use the parsed value instead of U256::ZERO
-        call_data_bytes.clone()
+    let mut user_op_request = UserOperationBuilder::new(
+        account_addr,                    // ✅ Smart account as sender
+        U256::ZERO,                      // ✅ No direct value transfer
+        Bytes::from(encoded_call_data)   // ✅ Encoded execute() call
     )
-    // Don't set sender manually - let SmartAccountProvider handle deployment
-    .with_nonce(U256::from(nonce))
     .with_gas_fees(max_fee, priority_fee)
     .build();
     
-    println!("Submitting to bundler via SmartAccountProvider...");
+    // ✅ 4. USE AA-SDK-RS CAPABILITIES
+    let smart_provider = SmartAccountProvider::new(provider, simple_account);
     
-    // Submit using SmartAccountProvider
+    // Optional: Get gas estimates
+    println!("📊 Estimating gas parameters...");
+    match smart_provider.estimate_user_operation_gas(&user_op_request).await {
+        Ok(estimates) => {
+            println!("✅ Gas estimates: {:?}", estimates);
+        }
+        Err(e) => {
+            println!("⚠️  Gas estimation failed (proceeding anyway): {}", e);
+        }
+    }
+    
+    // Fill missing fields automatically
+    println!("🔧 Filling UserOperation fields automatically...");
+    smart_provider.fill_user_operation(&mut user_op_request).await?;
+    
+    // ✅ 5. SUBMIT WITH TRACKING
+    println!("🚀 Submitting transaction via smart account...");
     match smart_provider.send_user_operation(user_op_request, wallet.signer()).await {
-            Ok(user_op_hash) => {
-                println!("✅ UserOperation submitted successfully!");
-                println!("UserOperation Hash: {:?}", user_op_hash);
-                println!("You can track this transaction on the blockchain");
-            }
-            Err(e) => {
-                println!("❌ Error submitting UserOperation: {}", e);
-                println!("Make sure the bundler is running and supports eth_sendUserOperation");
-                println!("Also ensure the UserOperation is valid and properly signed");
+        Ok(user_op_hash) => {
+            println!("✅ UserOperation submitted successfully!");
+            println!("UserOperation Hash: {:?}", user_op_hash);
+            
+            // ✅ TRACK EXECUTION STATUS
+            println!("📋 Checking UserOperation execution status...");
+            tokio::time::sleep(tokio::time::Duration::from_secs(2)).await; // Wait for execution
+            
+            match smart_provider.get_user_operation_receipt(user_op_hash).await {
+                Ok(Some(receipt)) => {
+                    println!("✅ Transaction executed successfully!");
+                    println!("📋 Receipt details: {:?}", receipt);
+                    println!("🎉 Smart account transaction completed!");
+                }
+                Ok(None) => {
+                    println!("⏳ Transaction still pending...");
+                    println!("💡 Check status later with hash: {:?}", user_op_hash);
+                    
+                    // Get more operation details
+                    if let Ok(Some(op)) = smart_provider.get_user_operation(user_op_hash).await {
+                        println!("📊 UserOperation details: {:?}", op);
+                    }
+                }
+                Err(e) => {
+                    println!("⚠️  Could not verify execution status: {}", e);
+                    println!("💡 Operation may still have succeeded - check blockchain directly");
+                }
             }
         }
+        Err(e) => {
+            println!("❌ Transaction submission failed: {}", e);
+            println!("🔍 Possible causes:");
+            println!("  1. Smart account not properly deployed");
+            println!("  2. Insufficient gas fees");
+            println!("  3. Invalid target contract or call data");
+            println!("  4. Bundler connectivity issues");
+        }
+    }
     
     Ok(())
 }
