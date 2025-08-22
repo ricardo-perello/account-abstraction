@@ -1,0 +1,14 @@
+# Paymaster Service Configuration
+
+# Server settings
+server_port = 3000
+log_level = "info"
+
+# Verifier keys (hex format, no 0x prefix)
+[verifier_keys]
+default = "your_verifier_private_key_here"
+admin = "your_admin_verifier_key_here"
+
+# Example keys (replace with actual keys)
+# default = "1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef"
+# admin = "abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890"
