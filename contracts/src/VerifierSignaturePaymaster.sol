@@ -19,50 +19,85 @@ contract VerifierSignaturePaymaster is BasePaymaster {
         verifier = _verifier;
     }
     
+    // v0.7-style PackedUserOperation packing for paymaster digest
+    function _packForPaymaster(PackedUserOperation calldata u)
+        internal pure returns (bytes memory)
+    {
+        return abi.encode(
+            u.sender,
+            u.nonce,
+            keccak256(u.initCode),
+            keccak256(u.callData),
+            u.accountGasLimits,        // bytes32 (packed call/verification gas)
+            u.preVerificationGas,      // uint256
+            u.gasFees                  // bytes32 (packed maxPriority/maxFee)
+        );
+    }
+
+    function _pmHash(
+        PackedUserOperation calldata u,
+        uint64 validUntil,
+        uint64 validAfter,           // use 0 if unused
+        uint256 /*maxCost*/          // don't bind to EntryPoint's computed value
+    ) internal view returns (bytes32) {
+        return keccak256(
+            abi.encode(
+                _packForPaymaster(u),
+                block.chainid,
+                address(this),        // bind to *this* paymaster
+                validUntil,
+                validAfter
+            )
+        );
+    }
+
     function _validatePaymasterUserOp(
         PackedUserOperation calldata userOp,
-        bytes32 userOpHash,
-        uint256 maxCost
+        bytes32 /*userOpHash*/,      // ignore - not used for pm sig
+        uint256 /*maxCost*/
     ) internal virtual override returns (bytes memory context, uint256 validationData) {
         
-        // Decode paymaster data (signature + expiration)
-        PaymasterData memory data = _decodePaymasterData(userOp.paymasterAndData);
-        
-        // Create message hash for signature verification
-        bytes32 messageHash = keccak256(abi.encodePacked(
-            userOpHash,           // Bind to specific operation
-            data.validUntil,      // Time window
-            maxCost               // Gas cost limit
-        ));
-        
-        // Use EIP-191 for signature verification
-        bytes32 ethSignedHash = messageHash.toEthSignedMessageHash();
-        address recoveredSigner = ethSignedHash.recover(data.signature);
-        
-        // Verify signature is from authorized verifier
-        require(recoveredSigner == verifier, "Invalid verifier signature");
-        require(block.timestamp <= data.validUntil, "Signature expired");
+        // Layout: [addr (20) | verifGas (16) | postOpGas (16) | ...paymasterData]
+        // paymasterData := [signature (65) | validUntil (8) | validAfter (8)]
+        bytes calldata d = userOp.paymasterAndData[PAYMASTER_DATA_OFFSET:];
+        bytes calldata sig = d[:65];
+        uint64 validUntil = uint64(bytes8(d[65:73]));
+        uint64 validAfter = uint64(bytes8(d[73:81]));
+
+        bytes32 digest = MessageHashUtils.toEthSignedMessageHash(
+            _pmHash(userOp, validUntil, validAfter, 0)
+        );
+        address recovered = ECDSA.recover(digest, sig);
+
+        bool sigBad = (recovered != verifier);
+        if (sigBad) {
+            revert("Invalid verifier signature");
+        }
         
         // Log gas sponsorship
-        emit GasSponsored(userOp.sender, maxCost, userOpHash);
+        emit GasSponsored(userOp.sender, 0, 0); // maxCost not available in this context
         
         // Return success (empty context, 0 validation data)
         return ("", 0);
     }
     
-    // Paymaster data structure
-    struct PaymasterData {
-        bytes signature;         // ECDSA signature from verifier
-        uint64 validUntil;       // Expiration timestamp
+    // Public helper for off-chain signature creation
+    function getPaymasterHash(
+        PackedUserOperation calldata userOp,
+        uint64 validUntil,
+        uint64 validAfter
+    ) external view returns (bytes32) {
+        return _pmHash(userOp, validUntil, validAfter, 0);
     }
     
-    // Decode paymaster data from UserOperation
-    function _decodePaymasterData(bytes calldata paymasterAndData) 
-        internal pure returns (PaymasterData memory data) {
-        require(paymasterAndData.length >= 73, "Invalid paymaster data length");
-        
-        // Extract signature (65 bytes) and validUntil (8 bytes)
-        data.signature = paymasterAndData[:65];
-        data.validUntil = uint64(bytes8(paymasterAndData[65:73]));
+    // Public helper for off-chain signature creation with EIP-191 formatting
+    function getPaymasterDigest(
+        PackedUserOperation calldata userOp,
+        uint64 validUntil,
+        uint64 validAfter
+    ) external view returns (bytes32) {
+        return MessageHashUtils.toEthSignedMessageHash(
+            _pmHash(userOp, validUntil, validAfter, 0)
+        );
     }
 }

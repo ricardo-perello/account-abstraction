@@ -133,11 +133,11 @@ contract AAAccount is BaseAccount {
         PackedUserOperation calldata userOp,
         bytes32 userOpHash
     ) internal override returns (uint256 validationData) {
-        // Create EIP-191 signed message hash
-        bytes32 hash = MessageHashUtils.toEthSignedMessageHash(userOpHash);
+        // userOpHash is already the EIP-712 typed data hash, use it directly
+        // No need to apply EIP-191 formatting again
         
         // Use ECDSA.tryRecover for safe signature recovery
-        (address signer, ECDSA.RecoverError error,) = ECDSA.tryRecover(hash, userOp.signature);
+        (address signer, ECDSA.RecoverError error,) = ECDSA.tryRecover(userOpHash, userOp.signature);
         
         // Check for recovery errors
         if (error != ECDSA.RecoverError.NoError) {
