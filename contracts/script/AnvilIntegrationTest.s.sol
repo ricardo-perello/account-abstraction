@@ -164,8 +164,10 @@ contract AnvilIntegrationTest is Script {
         
         // Verify account was created
         account = AAAccount(payable(predictedAccount));
-        console.log("Account code length after:", address(account).code.length);
-        require(address(account).code.length > 0, "Account not deployed");
+        uint256 codeLength = address(account).code.length;
+        console.log("Account code length after:", codeLength);
+        require(codeLength > 0, "Account not deployed");
+        console.log("SANITY CHECK: Account has", codeLength, "bytes of code - deployment successful!");
         console.log("Smart account created gaslessly at:", address(account));
         console.log("Account owner balance after:", accountOwner.balance);
         console.log("Account balance after:", address(account).balance);
@@ -277,7 +279,7 @@ contract AnvilIntegrationTest is Script {
             nonce: nonce,
             initCode: "",
             callData: callData,
-            accountGasLimits: bytes32(abi.encodePacked(uint128(30000), uint128(30000))),
+            accountGasLimits: bytes32(abi.encodePacked(uint128(100000), uint128(100000))), // Increased for ETH transfers
             preVerificationGas: 21000,
             gasFees: bytes32(abi.encodePacked(uint128(1000000000), uint128(10000000000))),
             paymasterAndData: "",
