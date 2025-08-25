@@ -7,24 +7,24 @@ edition = "2021"
 # HTTP server framework
 tokio = { version = "1.0", features = ["full"] }
 axum = "0.7"
-tower = "0.4"
-tower-http = { version = "0.5", features = ["cors"] }
 
 # Serialization
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 
 # Cryptography
-secp256k1 = { version = "0.28", features = ["rand"] }
+secp256k1 = { version = "0.28", features = ["rand", "recovery"] }
 sha3 = "0.10"
 hex = "0.4"
 
 # Utilities
 chrono = { version = "0.4", features = ["serde"] }
-anyhow = "1.0"
 tracing = "0.1"
 tracing-subscriber = "0.3"
 config = "0.14"
 
-# HTTP client
-reqwest = { version = "0.11", features = ["json", "rustls-tls"] }
+# Ethereum types
+alloy-primitives = { version = "0.8", features = ["serde"] }
+
+[dev-dependencies]
+tower = "0.5"

@@ -4,11 +4,20 @@
 server_port = 3000
 log_level = "info"
 
+# Blockchain settings
+chain_id = 1  # Ethereum mainnet (change to 11155111 for Sepolia testnet)
+paymaster_address = "0x0000000000000000000000000000000000000000"  # Replace with deployed paymaster address
+
 # Verifier keys (hex format, no 0x prefix)
 [verifier_keys]
-default = "your_verifier_private_key_here"
-admin = "your_admin_verifier_key_here"
+default = "0000000000000000000000000000000000000000000000000000000000000001"
+
+# API keys for client authentication
+[api_keys]
+"api_key_123" = "Ricardo's Trading Bot"
+"api_key_456" = "Ricardo's Web App"
 
 # Example keys (replace with actual keys)
-# default = "1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef"
-# admin = "abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890"
+# default = "0000000000000000000000000000000000000000000000000000000000000001"
+# "my_trading_bot_key" = "My Trading Bot"
+# "my_web_app_key" = "My Web App"

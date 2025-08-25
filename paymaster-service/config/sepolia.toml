@@ -1,0 +1,25 @@
+# Paymaster Service Configuration for Sepolia Testnet
+
+# Server settings
+server_port = 3000
+log_level = "info"
+
+# Sepolia blockchain settings
+chain_id = 11155111  # Sepolia testnet
+paymaster_address = "0x3da84818e202009488D2A8e2a3B2f78A6F6321bb"  # Deployed VerifierSignaturePaymaster
+
+# Verifier keys for Sepolia (matches deployed paymaster contract)
+[verifier_keys]
+default = "9ec161507ad1cfd507ae6e6bf012a66d609276782ae64f70ca41174d402d10ae"  # Test key from deployment info
+
+# API keys for client authentication
+[api_keys]
+"sepolia_test_key_123" = "Sepolia Test Client"
+"demo_key_456" = "Demo Application"
+"ricardo_bot_789" = "Ricardo's Trading Bot"
+
+# Production notes:
+# 1. Replace verifier key with your own secure key
+# 2. Update paymaster_address after deployment
+# 3. Add your own API keys
+# 4. Use environment variables in production

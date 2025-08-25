@@ -1,0 +1,18 @@
+# Test configuration for paymaster service
+
+# Server settings
+server_port = 0  # Use random port for testing
+log_level = "debug"
+
+# Blockchain settings for testing
+chain_id = 11155111  # Sepolia testnet
+paymaster_address = "0x0000000000000000000000000000000000000000"  # Test paymaster address
+
+# Test verifier keys (DO NOT USE IN PRODUCTION)
+[verifier_keys]
+default = "0000000000000000000000000000000000000000000000000000000000000001"
+
+# Test API keys (DO NOT USE IN PRODUCTION)
+[api_keys]
+"test_key_123" = "Test Client"
+"test_key_456" = "Another Test Client"

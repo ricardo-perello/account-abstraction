@@ -1,9 +1,7 @@
 use axum::{
     routing::{post, get},
-    http::StatusCode,
-    Json, Router,
+    Router,
 };
-use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
 mod key_manager;
@@ -12,6 +10,7 @@ mod api;
 
 use signature_service::SignatureService;
 use key_manager::KeyManager;
+use paymaster_service::Config;
 
 #[tokio::main]
 async fn main() {
@@ -23,7 +22,22 @@ async fn main() {
     
     // Initialize services
     let key_manager = Arc::new(KeyManager::new(&config));
-    let signature_service = Arc::new(SignatureService::new(key_manager));
+    
+    // Parse chain ID and paymaster address from config
+    let chain_id = config.chain_id.unwrap_or(1); // Default to Ethereum mainnet
+    let paymaster_address = if let Some(addr_str) = &config.paymaster_address {
+        let addr_clean = addr_str.strip_prefix("0x").unwrap_or(addr_str);
+        hex::decode(addr_clean).unwrap_or(vec![0u8; 20])
+    } else {
+        vec![0u8; 20] // Default to zero address
+    };
+    
+    let signature_service = Arc::new(SignatureService::new(
+        key_manager, 
+        config.api_keys, 
+        chain_id, 
+        paymaster_address
+    ));
     
     // Build application
     let app = Router::new()
@@ -33,29 +47,11 @@ async fn main() {
         .with_state(signature_service);
     
     // Start server
-    let addr = format!("[::]:{}", config.server_port).parse().unwrap();
+    let addr = format!("[::]:{}", config.server_port);
     tracing::info!("Starting paymaster service on {}", addr);
     
-    axum::Server::bind(&addr)
-        .serve(app.into_make_service())
-        .await
-        .unwrap();
+    let listener = tokio::net::TcpListener::bind(addr).await.unwrap();
+    axum::serve(listener, app).await.unwrap();
 }
 
-#[derive(Debug, Deserialize)]
-pub struct Config {
-    pub verifier_keys: std::collections::HashMap<String, String>,
-    pub server_port: u16,
-    pub log_level: String,
-}
 
-impl Config {
-    pub fn load() -> Result<Self, config::ConfigError> {
-        let settings = config::Config::builder()
-            .add_source(config::File::with_name("config"))
-            .add_source(config::Environment::with_prefix("PAYMASTER"))
-            .build()?;
-        
-        settings.try_deserialize()
-    }
-}
