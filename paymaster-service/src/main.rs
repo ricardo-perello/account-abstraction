@@ -32,11 +32,14 @@ async fn main() {
         vec![0u8; 20] // Default to zero address
     };
     
+    let is_simple_paymaster = config.is_simple_paymaster.unwrap_or(false);
+    
     let signature_service = Arc::new(SignatureService::new(
         key_manager, 
         config.api_keys, 
         chain_id, 
-        paymaster_address
+        paymaster_address,
+        is_simple_paymaster
     ));
     
     // Build application

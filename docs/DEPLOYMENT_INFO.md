@@ -31,9 +31,10 @@
 |----------|---------|---------|--------|---------|
 | **EntryPoint** | Sepolia | `0x0000000071727De22E5E9d8BAf0edAc6f37da032` | ✅ Active | Standard ERC-4337 entry point |
 | **EntryPoint** | Anvil | `0x0000000071727De22E5E9d8BAf0edAc6f37da032` | ✅ Active | Standard ERC-4337 entry point |
-| **AAAccountFactory** | Sepolia | `0x59bcaa1BB72972Df0446FCe98798076e718E3b61` | ✅ Active | Smart account factory |
+| **AAAccountFactory** | Sepolia | `0x939b2f682d52A7b0232e3a11023E1110782272A2` | ✅ Active | Smart account factory (Updated v0.7) |
 | **AAAccountFactory** | Anvil | `0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512` | ✅ Active | Smart account factory |
 | **VerifierSignaturePaymaster** | Sepolia | `0xed616Dc0c42B75206595b22abECAC40130f2e1e6` | ✅ Active | Gas sponsorship paymaster (Fixed v0.7) |
+| **SimplePaymaster** | Sepolia | `0xB0828F3A1F54D52dc91122e6191ffe46da37020f` | ✅ Active | Simple gas sponsorship paymaster (v0.7) |
 
 ### **Live Smart Account Deployments**
 
@@ -57,6 +58,25 @@
 - **Chain ID**: `11155111` (Sepolia)
 - **API Keys**: `sepolia_test_key_123`, `demo_key_456`, `ricardo_bot_789`
 - **⚠️ SECURITY**: Test keys only - never use on mainnet!
+
+#### **🔑 SimplePaymaster Configuration (NEW)**
+- **Paymaster Address**: `0xB0828F3A1F54D52dc91122e6191ffe46da37020f`
+- **EntryPoint**: `0x0000000071727De22E5E9d8BAf0edAc6f37da032` (Canonical v0.7)
+- **Max Gas Cost**: 0 ETH (unlimited)
+- **Deployer**: `0xd59c5D74A376f08E3036262F1D59Be24dE138c41`
+- **Transaction Hash**: `0x29c87b4c92a86fa730582ce286f27a88b8786faccf78601c1dd70bea5161c719`
+- **Block**: 9069921
+- **Status**: ✅ **DEPLOYED & READY FOR TESTING**
+- **⚠️ NOTE**: Needs funding for gas sponsorship operations
+
+#### **🔑 AAAccountFactory Configuration (UPDATED)**
+- **Factory Address**: `0x939b2f682d52A7b0232e3a11023E1110782272A2`
+- **EntryPoint**: `0x0000000071727De22E5E9d8BAf0edAc6f37da032` (Canonical v0.7)
+- **Deployer**: `0xd59c5D74A376f08E3036262F1D59Be24dE138c41`
+- **Transaction Hash**: `0x990876079d0b601b6ba018261ab0f4680d9a9e6dbaed83923a42054afd9a9aa3`
+- **Block**: 9070479
+- **Status**: ✅ **DEPLOYED & READY FOR GASLESS TESTING**
+- **⚠️ NOTE**: Updated to work with SimplePaymaster and v0.7 EntryPoint
 
 ## 🎯 **Live Testing Results**
 
@@ -100,6 +120,17 @@
 - **Network**: Sepolia Testnet
 - **Status**: ✅ **TRANSACTION EXECUTED SUCCESSFULLY**
 
+#### **🎉 SimplePaymaster Local Testing (CONFIRMED)**
+- **Date**: August 26, 2025 (Latest Success)
+- **Test Environment**: Local Anvil (Chain ID: 31337)
+- **Test Type**: Full gasless flow with SimplePaymaster
+- **Results**: ✅ **COMPLETE SUCCESS**
+  - **Gasless Account Creation**: Smart account deployed successfully
+  - **Gasless Transaction**: 0.1 ETH transfer executed successfully
+  - **Paymaster Validation**: All UserOperations validated correctly
+  - **Gas Sponsorship**: Paymaster sponsored all gas costs
+- **Status**: ✅ **READY FOR SEPOLIA TESTING**
+
 ## ⚙️ **Working CLI Commands**
 
 ### **Deploy Smart Account (Sepolia)**
@@ -115,7 +146,7 @@ source ../.env
   --salt 0x00 \
   --chain-id 11155111 \
   --rpc-url $ALCHEMY_HTTP_SEPOLIA \
-  --factory 0x59bcaa1BB72972Df0446FCe98798076e718E3b61
+  --factory 0x939b2f682d52A7b0232e3a11023E1110782272A2
 
 # Result: 
 # - EOA (your traditional wallet) controls the deployed smart account
@@ -129,7 +160,7 @@ source ../.env
   --private-key YOUR_EOA_PRIVATE_KEY \  # EOA private key (authorizes smart account operation)
   --target 0xRECIPIENT_ADDRESS \        # Transaction recipient  
   --call-data 0x \
-  --factory 0x59bcaa1BB72972Df0446FCe98798076e718E3b61 \
+  --factory 0x939b2f682d52A7b0232e3a11023E1110782272A2 \
   --salt 0x00 \
   --chain-id 11155111 \
   --rpc-url $ALCHEMY_HTTP_SEPOLIA \
@@ -142,7 +173,7 @@ source ../.env
 ```bash
 # Get deterministic address before deployment
 ./target/debug/aa-client predict-address \
-  --factory 0x59bcaa1BB72972Df0446FCe98798076e718E3b61 \
+  --factory 0x939b2f682d52A7b0232e3a11023E1110782272A2 \
   --owner YOUR_EOA_ADDRESS \
   --salt 0x00 \
   --chain-id 11155111 \
@@ -167,13 +198,13 @@ source ../.env
 # Deploy smart account with zero gas fees (paymaster sponsors)
 ./target/release/aa-client deploy-sponsored \
   --private-key $PRIVATE_KEY \
-  --factory 0x59bcaa1BB72972Df0446FCe98798076e718E3b61 \
+  --factory 0x939b2f682d52A7b0232e3a11023E1110782272A2 \
   --salt 0x1234567890abcdef \
   --rpc-url $ALCHEMY_HTTP_SEPOLIA \
   --chain-id 11155111 \
   --paymaster-url http://localhost:3000 \
   --paymaster-api-key sepolia_test_key_123 \
-  --paymaster-address 0x2c8ddc96d2A24b5de5eb248e09f5D684dDA2A485
+  --paymaster-address 0xB0828F3A1F54D52dc91122e6191ffe46da37020f
 
 # Result: Smart account deployed with ZERO gas fees paid by user!
 ```
@@ -185,14 +216,14 @@ source ../.env
   --private-key $PRIVATE_KEY \
   --target 0xRECIPIENT_ADDRESS \
   --call-data 0x \
-  --factory 0x59bcaa1BB72972Df0446FCe98798076e718E3b61 \
+  --factory 0x939b2f682d52A7b0232e3a11023E1110782272A2 \
   --salt 0x1234567890abcdef \
   --rpc-url $ALCHEMY_HTTP_SEPOLIA \
   --chain-id 11155111 \
   --value 1000000000000000 \
   --paymaster-url http://localhost:3000 \
   --paymaster-api-key sepolia_test_key_123 \
-  --paymaster-address 0x2c8ddc96d2A24b5de5eb248e09f5D684dDA2A485
+  --paymaster-address 0xB0828F3A1F54D52dc91122e6191ffe46da37020f
 
 # Result: Transaction executed with ZERO gas fees paid by user!
 ```
@@ -316,6 +347,7 @@ account-abstraction/
 7. **Wallet Management** - Generate and manage test wallets
 8. **🌟 Gas Sponsorship** - Zero-cost transactions via paymaster
 9. **🌟 ERC-4337 Paymaster** - Full sponsored transaction system
+10. **🌟 SimplePaymaster** - New simple gas sponsorship contract deployed
 
 ### **Proof of Functionality**
 - 📍 **Smart Account**: `0xd710e28ecfb47f55f234513ce3be18a31974590c` (Live on Sepolia)
@@ -325,6 +357,13 @@ account-abstraction/
 - 🌟 **Paymaster Contract**: `0x2c8ddc96d2A24b5de5eb248e09f5D684dDA2A485` (Deployed & Verified - Fixed)
 - 🌟 **Sponsored Transaction**: `0xc9187574e24dda2908a898ce13848c01f3510c51a57bbfa7d520feb941dffebc` (Zero Gas!)
 - 💸 **Gas Sponsorship**: $0.00 user cost - fully sponsored by paymaster
+- 🆕 **SimplePaymaster**: `0xB0828F3A1F54D52dc91122e6191ffe46da37020f` (Deployed & Ready for Testing)
+
+### **🆕 SimplePaymaster Status**
+- **Contract**: ✅ Successfully deployed to Sepolia
+- **Local Testing**: ✅ Full gasless flow working perfectly
+- **Sepolia Testing**: 🔄 Ready to test with real transactions
+- **Next Steps**: Fund paymaster and test gas sponsorship on Sepolia
 
 ## 🚨 **Security Reminders**
 
@@ -337,10 +376,12 @@ account-abstraction/
 ---
 
 **Status**: ✅ **PRODUCTION READY WITH GAS SPONSORSHIP** - All core functionality + paymaster tested and verified  
-**Last Updated**: January 2025  
+**Last Updated**: August 26, 2025  
 **Testing Network**: Sepolia Ethereum Testnet  
 **Bundler Provider**: Alchemy (ERC-4337 compatible)  
-**Gas Sponsorship**: ✅ **LIVE & OPERATIONAL** - Zero-cost transactions confirmed
+**Gas Sponsorship**: ✅ **LIVE & OPERATIONAL** - Zero-cost transactions confirmed  
+**SimplePaymaster**: ✅ **DEPLOYED & READY** - New simple gas sponsorship contract on Sepolia  
+**AAAccountFactory**: ✅ **UPDATED & DEPLOYED** - New factory compatible with SimplePaymaster and v0.7 EntryPoint
 
 ## 🚨 **CURRENT ISSUE - REQUIRES BOSS REVIEW**
 

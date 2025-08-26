@@ -1218,6 +1218,17 @@ async fn deploy_sponsored_smart_account(
         Bytes::new()
     ).build();
     
+    // Set explicit gas fees to meet bundler requirements
+    let max_fee = U256::from_str_radix("5000000000", 10)?; // 5 gwei
+    let priority_fee = U256::from_str_radix("200000000", 10)?; // 0.2 gwei (above 0.1 gwei minimum)
+    
+    user_op_request.max_fee_per_gas = Some(max_fee);
+    user_op_request.max_priority_fee_per_gas = Some(priority_fee);
+    
+    println!("💰 Using gas fees - Max: {} gwei, Priority: {} gwei", 
+             max_fee / U256::from(1_000_000_000u64),
+             priority_fee / U256::from(1_000_000_000u64));
+    
     // Fill UserOperation fields
     smart_provider.fill_user_operation(&mut user_op_request).await?;
     

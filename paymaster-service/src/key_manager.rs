@@ -132,6 +132,7 @@ mod tests {
             log_level: "info".to_string(),
             chain_id: Some(1),
             paymaster_address: Some("0x0000000000000000000000000000000000000000".to_string()),
+            is_simple_paymaster: Some(false),
         }
     }
 

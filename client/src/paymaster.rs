@@ -95,7 +95,28 @@ impl PaymasterService {
 
         let service_response: PaymasterServiceResponse = response.json().await?;
         
-        // Parse signature from hex
+        // Check if this is a SimplePaymaster response (empty signature/data)
+        if service_response.signature == "0x" && service_response.paymaster_data == "0x" {
+            println!("SimplePaymaster detected - no signature needed");
+            
+            // For SimplePaymaster, create empty signature and data
+            let mut signature = [0u8; 65];
+            // Set a dummy signature that won't be used for validation
+            signature[0] = 0x00; // r starts with 0
+            
+            println!("SimplePaymaster sponsorship approved!");
+            println!("Signature: 0x{}", service_response.signature);
+            println!("Paymaster data: 0x{}", service_response.paymaster_data);
+
+            return Ok(PaymasterConfig {
+                paymaster_address: self.paymaster_address,
+                signature,
+                valid_until: service_response.valid_until,
+                valid_after: service_response.valid_after,
+            });
+        }
+        
+        // Parse signature from hex for VerifierSignaturePaymaster
         let signature_bytes = hex::decode(&service_response.signature)?;
         if signature_bytes.len() != 65 {
             return Err(anyhow::anyhow!("Invalid signature length: expected 65 bytes, got {}", signature_bytes.len()));
@@ -104,7 +125,7 @@ impl PaymasterService {
         let mut signature = [0u8; 65];
         signature.copy_from_slice(&signature_bytes);
 
-        println!("✅ Paymaster sponsorship approved!");
+        println!("VerifierSignaturePaymaster sponsorship approved!");
         println!("Signature: 0x{}", service_response.signature);
         println!("Paymaster data: 0x{}", service_response.paymaster_data);
 
@@ -164,7 +185,15 @@ impl PaymasterService {
     /// Build paymasterAndData EXTRA DATA ONLY (v0.7): signature + validUntil + validAfter
     /// The bundler/EntryPoint prefixes address (20) + verificationGas (16) + postOpGas (16).
     /// Here we must only return the paymaster-specific data: 65 + 8 + 8 = 81 bytes.
+    /// For SimplePaymaster, returns empty data since no signature is needed.
     pub fn build_paymaster_and_data(&self, config: &PaymasterConfig) -> Bytes {
+        // Check if this is a SimplePaymaster (signature starts with 0x00)
+        if config.signature[0] == 0x00 {
+            println!("SimplePaymaster detected - returning empty paymaster data");
+            return Bytes::new(); // Empty data for SimplePaymaster
+        }
+        
+        // For VerifierSignaturePaymaster, build signature + validUntil + validAfter
         let mut data = Vec::new();
         
         // Signature (65 bytes: r || s || v)

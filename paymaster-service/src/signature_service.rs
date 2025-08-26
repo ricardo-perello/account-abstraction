@@ -62,6 +62,7 @@ pub struct SignatureService {
     api_keys: HashMap<String, String>, // api_key -> client_name
     chain_id: u64,
     paymaster_address: Vec<u8>,
+    is_simple_paymaster: bool,
 }
 
 impl SignatureService {
@@ -69,13 +70,15 @@ impl SignatureService {
         key_manager: Arc<KeyManager>, 
         api_keys: HashMap<String, String>, 
         chain_id: u64,
-        paymaster_address: Vec<u8>
+        paymaster_address: Vec<u8>,
+        is_simple_paymaster: bool,
     ) -> Self {
         Self {
             key_manager,
             api_keys,
             chain_id,
             paymaster_address,
+            is_simple_paymaster,
         }
     }
     
@@ -100,6 +103,23 @@ impl SignatureService {
         }
         
         let valid_after = request.valid_after.unwrap_or(0);
+        
+        // Check if this is a simple paymaster (no signatures needed)
+        if self.is_simple_paymaster {
+            println!("🔧 SimplePaymaster detected - no signature needed");
+            
+            // For SimplePaymaster, return empty data
+            let paymaster_data: Vec<u8> = Vec::new(); // Empty data for SimplePaymaster
+            
+            println!("🔧 SimplePaymaster data: empty (0x)");
+            
+            return Ok(SponsorshipResponse {
+                signature: "0x".to_string(), // No signature needed
+                valid_until: request.valid_until,
+                valid_after,
+                paymaster_data: "0x".to_string(), // Empty data
+            });
+        }
         
         // DEBUG: Print received UserOperation data
         println!("🔍 DEBUG: Received UserOperation data:");
@@ -314,6 +334,7 @@ mod tests {
             log_level: "info".to_string(),
             chain_id: Some(1),
             paymaster_address: Some("0x0000000000000000000000000000000000000000".to_string()),
+            is_simple_paymaster: Some(false),
         }
     }
 
@@ -350,7 +371,8 @@ mod tests {
             key_manager, 
             api_keys, 
             1, // chain_id
-            vec![0u8; 20] // paymaster_address
+            vec![0u8; 20], // paymaster_address
+            false, // is_simple_paymaster
         );
         
         let request = create_test_request();
@@ -380,7 +402,8 @@ mod tests {
             key_manager, 
             api_keys, 
             1, // chain_id
-            vec![0u8; 20] // paymaster_address
+            vec![0u8; 20], // paymaster_address
+            false, // is_simple_paymaster
         );
         
         let mut request = create_test_request();
@@ -401,7 +424,8 @@ mod tests {
             key_manager, 
             api_keys, 
             1, // chain_id
-            vec![0u8; 20] // paymaster_address
+            vec![0u8; 20], // paymaster_address
+            false, // is_simple_paymaster
         );
         
         let mut request = create_test_request();
@@ -411,6 +435,31 @@ mod tests {
         
         assert!(result.is_err());
         assert!(matches!(result.unwrap_err(), SignatureError::InvalidTimestamp));
+    }
+
+    #[tokio::test]
+    async fn test_simple_paymaster() {
+        let config = create_test_config();
+        let key_manager = Arc::new(KeyManager::new(&config));
+        let api_keys = create_test_api_keys();
+        let signature_service = SignatureService::new(
+            key_manager, 
+            api_keys, 
+            1, // chain_id
+            vec![0u8; 20], // paymaster_address
+            true, // is_simple_paymaster
+        );
+        
+        let request = create_test_request();
+        let result = signature_service.sign_sponsorship(request).await;
+        
+        assert!(result.is_ok());
+        let response = result.unwrap();
+        
+        // Check response structure for simple paymaster
+        assert_eq!(response.signature, "0x"); // No signature needed
+        assert_eq!(response.paymaster_data, "0x"); // Empty data
+        assert!(response.valid_until > 0);
     }
 }
 

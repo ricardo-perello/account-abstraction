@@ -12,6 +12,7 @@ pub struct Config {
     pub log_level: String,
     pub chain_id: Option<u64>,
     pub paymaster_address: Option<String>,
+    pub is_simple_paymaster: Option<bool>,
 }
 
 impl Config {

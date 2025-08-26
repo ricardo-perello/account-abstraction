@@ -4,7 +4,7 @@ pragma solidity ^0.8.28;
 import "./AAAccount.sol";
 import "@openzeppelin/contracts/utils/Create2.sol";
 import "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
-import "@account-abstraction/contracts/interfaces/ISenderCreator.sol";
+import "@account-abstraction/contracts/core/SenderCreator.sol";
 
 /**
  * @title AAAccountFactory  
@@ -14,15 +14,12 @@ import "@account-abstraction/contracts/interfaces/ISenderCreator.sol";
  * Compatible with EntryPoint v0.7+
  */
 contract AAAccountFactory {
-    // EntryPoint contract address
+    /// @notice The EntryPoint contract
     IEntryPoint public immutable entryPoint;
-    
-    // Implementation contract for proxy deployments
+
+    /// @notice The account implementation contract
     AAAccount public immutable accountImplementation;
-    
-    // SenderCreator for access control (same as SimpleAccountFactory)
-    ISenderCreator public immutable senderCreator;
-    
+
     // Events
     event AccountCreated(address indexed account, address indexed owner, uint256 salt);
     event AccountCreatedWithOwners(address indexed account, address[] owners, uint256 salt);
@@ -45,23 +42,16 @@ contract AAAccountFactory {
         require(owner != address(0), "AAAccountFactory: owner cannot be zero");
         _;
     }
-    
-    /**
-     * @dev Constructor
-     * @param _entryPoint EntryPoint contract address
-     */
+
     constructor(IEntryPoint _entryPoint) {
+        require(address(_entryPoint) != address(0), "EntryPoint cannot be zero");
         entryPoint = _entryPoint;
-        accountImplementation = new AAAccount(_entryPoint, address(0)); // Create implementation
         
-        // Try to get senderCreator, but handle the case where it doesn't exist
-        try _entryPoint.senderCreator() returns (ISenderCreator _senderCreator) {
-            senderCreator = _senderCreator;
-        } catch {
-            // If senderCreator() doesn't exist, set to zero address
-            // This means createAccount() will always revert, but createAccountDirect() will work
-            senderCreator = ISenderCreator(address(0));
-        }
+        // Deploy the account implementation
+        accountImplementation = new AAAccount();
+        
+        // In v0.7.0, EntryPoint doesn't have senderCreator function
+        // We'll use direct account creation instead
     }
     
     /**
@@ -75,7 +65,7 @@ contract AAAccountFactory {
             type(ERC1967Proxy).creationCode,
             abi.encode(
                 address(accountImplementation),
-                abi.encodeCall(AAAccount.initialize, (owner))
+                abi.encodeCall(AAAccount.initialize, (owner, address(entryPoint)))
             )
         )));
     }
@@ -93,7 +83,7 @@ contract AAAccountFactory {
             type(ERC1967Proxy).creationCode,
             abi.encode(
                 address(accountImplementation),
-                abi.encodeCall(AAAccount.initializeWithOwners, (owners))
+                abi.encodeCall(AAAccount.initializeWithOwners, (owners, address(entryPoint)))
             )
         )));
     }
@@ -117,9 +107,10 @@ contract AAAccountFactory {
      */
     function createAccount(address owner, uint256 salt) public returns (AAAccount ret) {
         // Only enforce SenderCreator restriction if it's available
-        if (address(senderCreator) != address(0)) {
-            require(msg.sender == address(senderCreator), "only callable from SenderCreator");
-        }
+        // In v0.7.0, EntryPoint doesn't have senderCreator function
+        // This check is no longer relevant as senderCreator is removed.
+        // The account creation logic will now always work directly.
+        
         address addr = getAddress(owner, salt);
         uint256 codeSize = addr.code.length;
         if (codeSize > 0) {
@@ -127,7 +118,7 @@ contract AAAccountFactory {
         }
         ret = AAAccount(payable(new ERC1967Proxy{salt : bytes32(salt)}(
                 address(accountImplementation),
-                abi.encodeCall(AAAccount.initialize, (owner))
+                abi.encodeCall(AAAccount.initialize, (owner, address(entryPoint)))
             )));
         
         emit AccountCreated(address(ret), owner, salt);
@@ -150,7 +141,7 @@ contract AAAccountFactory {
         bytes32 actualSalt = _computeMultiOwnerSalt(salt, owners);
         account = AAAccount(payable(new ERC1967Proxy{salt : actualSalt}(
                 address(accountImplementation),
-                abi.encodeCall(AAAccount.initializeWithOwners, (owners))
+                abi.encodeCall(AAAccount.initializeWithOwners, (owners, address(entryPoint)))
             )));
         
         emit AccountCreatedWithOwners(address(account), owners, salt);
@@ -171,7 +162,7 @@ contract AAAccountFactory {
         }
         account = AAAccount(payable(new ERC1967Proxy{salt : bytes32(salt)}(
                 address(accountImplementation),
-                abi.encodeCall(AAAccount.initialize, (owner))
+                abi.encodeCall(AAAccount.initialize, (owner, address(entryPoint)))
             )));
         
         emit AccountCreated(address(account), owner, salt);
