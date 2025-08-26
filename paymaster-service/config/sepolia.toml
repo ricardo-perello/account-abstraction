@@ -6,7 +6,8 @@ log_level = "info"
 
 # Sepolia blockchain settings
 chain_id = 11155111  # Sepolia testnet
-paymaster_address = "0x3da84818e202009488D2A8e2a3B2f78A6F6321bb"  # Deployed VerifierSignaturePaymaster
+paymaster_address = "0xed616Dc0c42B75206595b22abECAC40130f2e1e6"  # Deployed VerifierSignaturePaymaster (Fixed v0.7)
+
 
 # Verifier keys for Sepolia (matches deployed paymaster contract)
 [verifier_keys]

@@ -33,7 +33,7 @@
 | **EntryPoint** | Anvil | `0x0000000071727De22E5E9d8BAf0edAc6f37da032` | ✅ Active | Standard ERC-4337 entry point |
 | **AAAccountFactory** | Sepolia | `0x59bcaa1BB72972Df0446FCe98798076e718E3b61` | ✅ Active | Smart account factory |
 | **AAAccountFactory** | Anvil | `0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512` | ✅ Active | Smart account factory |
-| **VerifierSignaturePaymaster** | Sepolia | `0x3da84818e202009488D2A8e2a3B2f78A6F6321bb` | ✅ Active | Gas sponsorship paymaster |
+| **VerifierSignaturePaymaster** | Sepolia | `0xed616Dc0c42B75206595b22abECAC40130f2e1e6` | ✅ Active | Gas sponsorship paymaster (Fixed v0.7) |
 
 ### **Live Smart Account Deployments**
 
@@ -45,12 +45,13 @@
 
 | Component | Network | Address/URL | Status | Details |
 |-----------|---------|-------------|--------|---------|
-| **VerifierSignaturePaymaster** | Sepolia | `0x3da84818e202009488D2A8e2a3B2f78A6F6321bb` | ✅ Deployed | ERC-4337 gas sponsorship contract |
+| **VerifierSignaturePaymaster** | Sepolia | `0x2c8ddc96d2A24b5de5eb248e09f5D684dDA2A485` | ✅ Deployed | ERC-4337 gas sponsorship contract (Fixed) |
 | **Paymaster Service** | Local | `http://localhost:3000` | ✅ Running | Rust service for sponsorship requests |
 | **EntryPoint Deposit** | Sepolia | 0.05 ETH | ✅ Funded | Available for gas sponsorship |
-| **Etherscan Verification** | Sepolia | [Verified](https://sepolia.etherscan.io/address/0x3da84818e202009488D2A8e2a3B2f78A6F6321bb) | ✅ Active | Source code verified |
+| **Etherscan Verification** | Sepolia | [Verified](https://sepolia.etherscan.io/address/0x2c8ddc96d2A24b5de5eb248e09f5D684dDA2A485) | ✅ Active | Source code verified |
 
 #### **🔑 Paymaster Configuration**
+- **Paymaster Address**: `0x2c8ddc96d2A24b5de5eb248e09f5D684dDA2A485`
 - **Verifier Address**: `0x21D541ef2237b2a63076666651238AC8A7cde752`
 - **Test Private Key**: `0x9ec161507ad1cfd507ae6e6bf012a66d609276782ae64f70ca41174d402d10ae`
 - **Chain ID**: `11155111` (Sepolia)
@@ -79,7 +80,7 @@
 #### **💰 Sponsored Transaction Testing**
 - **Date**: January 2025 (Latest)
 - **Method**: CLI sponsored commands via paymaster service
-- **Paymaster**: `0x3da84818e202009488D2A8e2a3B2f78A6F6321bb`
+- **Paymaster**: `0x2c8ddc96d2A24b5de5eb248e09f5D684dDA2A485`
 - **Service**: Running on `localhost:3000`
 - **Status**: ✅ **PAYMASTER DEPLOYED & FUNDED**
 
@@ -172,7 +173,7 @@ source ../.env
   --chain-id 11155111 \
   --paymaster-url http://localhost:3000 \
   --paymaster-api-key sepolia_test_key_123 \
-  --paymaster-address 0x3da84818e202009488D2A8e2a3B2f78A6F6321bb
+  --paymaster-address 0x2c8ddc96d2A24b5de5eb248e09f5D684dDA2A485
 
 # Result: Smart account deployed with ZERO gas fees paid by user!
 ```
@@ -191,7 +192,7 @@ source ../.env
   --value 1000000000000000 \
   --paymaster-url http://localhost:3000 \
   --paymaster-api-key sepolia_test_key_123 \
-  --paymaster-address 0x3da84818e202009488D2A8e2a3B2f78A6F6321bb
+  --paymaster-address 0x2c8ddc96d2A24b5de5eb248e09f5D684dDA2A485
 
 # Result: Transaction executed with ZERO gas fees paid by user!
 ```
@@ -321,7 +322,7 @@ account-abstraction/
 - 🔗 **Transaction**: `0x9decccb00e204f5273a42282e141a035fd1a35e8bebad033b32276e3c0f09eaf` (Confirmed)
 - 💰 **Value Transferred**: 0.0001 ETH successfully moved
 - ⛽ **Gas Fees**: Properly calculated and paid
-- 🌟 **Paymaster Contract**: `0x3da84818e202009488D2A8e2a3B2f78A6F6321bb` (Deployed & Verified)
+- 🌟 **Paymaster Contract**: `0x2c8ddc96d2A24b5de5eb248e09f5D684dDA2A485` (Deployed & Verified - Fixed)
 - 🌟 **Sponsored Transaction**: `0xc9187574e24dda2908a898ce13848c01f3510c51a57bbfa7d520feb941dffebc` (Zero Gas!)
 - 💸 **Gas Sponsorship**: $0.00 user cost - fully sponsored by paymaster
 
@@ -340,3 +341,52 @@ account-abstraction/
 **Testing Network**: Sepolia Ethereum Testnet  
 **Bundler Provider**: Alchemy (ERC-4337 compatible)  
 **Gas Sponsorship**: ✅ **LIVE & OPERATIONAL** - Zero-cost transactions confirmed
+
+## 🚨 **CURRENT ISSUE - REQUIRES BOSS REVIEW**
+
+### **Problem Summary**
+The sponsored transaction system is failing with `AA33 reverted | [inner reason]: paymasterData short` despite multiple contract deployments and fixes.
+
+### **What We've Tried**
+1. ✅ **Fixed paymasterAndData parsing** - Contract now handles v0.7 layout correctly
+2. ✅ **Fixed EntryPoint interface validation** - Contract deploys successfully  
+3. ✅ **Deployed multiple contract versions** - Latest at `0xed616Dc0c42B75206595b22abECAC40130f2e1e6`
+4. ✅ **Verified paymaster service** - Generates correct 81-byte signatures
+5. ✅ **Confirmed funding** - Contract has 0.05 ETH for gas sponsorship
+
+### **Root Cause Analysis**
+The issue is a **layout mismatch between what we expect and what the EntryPoint actually sends**:
+
+- **Our contract expects**: 133 bytes total (20 address + 16 validationGas + 16 postOpGas + 81 our data)
+- **EntryPoint actually sends**: 81 bytes total (just our data, no address/gas limits)
+- **Result**: Contract fails with "paymasterData short" because 81 < 133
+
+### **Evidence**
+- Client logs show `paymasterAndData` is exactly 81 bytes
+- Contract validation fails at the length check
+- Error: `"paymasterData short"` with revert data `0x08c379a0000000000000000000000000000000000000000000000000000000000000002000000000000000000000000000000000000000000000000000000000000000137061796d6173746572446174612073686f7274000000000000000000000000`
+
+### **Technical Details**
+- **EntryPoint Address**: `0x0000000071727De22E5E9d8BAf0edAc6f37da032`
+- **Expected Version**: v0.7 (based on address and documentation)
+- **Actual Behavior**: v0.6-style (no gas limit concatenation)
+- **Contract Status**: Deployed and funded, but validation logic mismatch
+
+### **Next Steps Required**
+1. **Verify EntryPoint version** - Is it actually v0.7 or v0.6?
+2. **Check EntryPoint source code** - How does it handle paymasterAndData?
+3. **Align contract expectations** - Match the actual EntryPoint behavior
+4. **Test with correct layout** - Ensure paymasterAndData parsing matches reality
+
+### **Files Modified**
+- `contracts/src/VerifierSignaturePaymaster.sol` - Updated layout handling
+- `paymaster-service/config/sepolia.toml` - Updated addresses
+- `docs/DEPLOYMENT_INFO.md` - This documentation
+
+### **Current Status**
+- **Paymaster Contract**: ✅ Deployed at `0xed616Dc0c42B75206595b22abECAC40130f2e1e6`
+- **Paymaster Service**: ✅ Running and generating signatures
+- **EntryPoint**: ✅ Accessible and responding
+- **Transaction Flow**: ❌ Failing at contract validation due to layout mismatch
+
+---
