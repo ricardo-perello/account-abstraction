@@ -41,6 +41,7 @@
 | Account Type | Network | Address | Owner | Deployment Method | Transaction Hash |
 |-------------|---------|---------|-------|------------------|------------------|
 | **Single-Owner** | Sepolia | `0xd710e28ecfb47f55f234513ce3be18a31974590c` | `0x21D541ef2237b2a63076666651238AC8A7cde752` | CLI + Bundler | Live deployment confirmed |
+| **Single-Owner (Gasless)** | Sepolia | `0x159Ea6A05b9AA5d05d41FC9558233308ce1afFcA` | `0xd59c5D74A376f08E3036262F1D59Be24dE138c41` | CLI + SimplePaymaster | `0x8b2e1690508cab5c896e2981abfa3a0843ee7b553ceb79af76d39fdd9a094152` |
 
 ### **Paymaster Service Deployment** 
 
@@ -130,6 +131,18 @@
   - **Paymaster Validation**: All UserOperations validated correctly
   - **Gas Sponsorship**: Paymaster sponsored all gas costs
 - **Status**: ✅ **READY FOR SEPOLIA TESTING**
+
+#### **🎉 SimplePaymaster Sepolia Testing (CONFIRMED)**
+- **Date**: August 26, 2025 (Latest Success)
+- **Test Environment**: Sepolia Testnet (Chain ID: 11155111)
+- **Test Type**: Gasless account creation via SimplePaymaster
+- **Results**: ✅ **COMPLETE SUCCESS**
+  - **Gasless Account Creation**: Smart account deployed at `0x159Ea6A05b9AA5d05d41FC9558233308ce1afFcA`
+  - **Owner**: `0xd59c5D74A376f08E3036262F1D59Be24dE138c41`
+  - **UserOperation Hash**: `0x8b2e1690508cab5c896e2981abfa3a0843ee7b553ceb79af76d39fdd9a094152`
+  - **Gas Cost**: **$0.00** (fully sponsored by SimplePaymaster)
+  - **Factory Used**: `0x939b2f682d52A7b0232e3a11023E1110782272A2`
+- **Status**: ✅ **GASLESS ACCOUNT CREATION WORKING ON SEPOLIA**
 
 ## ⚙️ **Working CLI Commands**
 
