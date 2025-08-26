@@ -75,7 +75,6 @@ impl KeyManager {
         verifier_name: &str,
         message: &[u8],
     ) -> Result<Vec<u8>, KeyManagerError> {
-        use sha3::{Digest, Keccak256};
         use secp256k1::Message;
         
         let keys = self.keys.read().await;
@@ -83,20 +82,28 @@ impl KeyManager {
             .get(verifier_name)
             .ok_or(KeyManagerError::VerifierNotFound)?;
         
-        // Hash the EIP-191 formatted message
-        let hash = Keccak256::digest(message);
-        
-        let message_obj = Message::from_digest_slice(&hash)
+        // The message is already the EIP-191 digest - sign it directly (no double-hashing)
+        let message_obj = Message::from_digest_slice(message)
             .map_err(|_| KeyManagerError::SigningError)?;
         
         // Sign and get recoverable signature
         let signature = self.secp.sign_ecdsa_recoverable(&message_obj, secret_key);
         let (recovery_id, compact_sig) = signature.serialize_compact();
         
-        // Convert to 65-byte signature with recovery byte
+        // Convert to r + s + v format (as expected by contract)
         let mut sig_bytes = Vec::with_capacity(65);
-        sig_bytes.extend_from_slice(&compact_sig);
-        sig_bytes.push(recovery_id.to_i32() as u8);
+        
+        // Split compact signature into r (32 bytes) and s (32 bytes)
+        let r = &compact_sig[0..32];
+        let s = &compact_sig[32..64];
+        
+        // Convert recovery ID to Solidity format (27 + recovery_id)
+        let v = 27 + recovery_id.to_i32() as u8;
+        
+        // Build signature as r + s + v (matches abi.encodePacked(r, s, v))
+        sig_bytes.extend_from_slice(r);    // r: 32 bytes
+        sig_bytes.extend_from_slice(s);    // s: 32 bytes  
+        sig_bytes.push(v);                 // v: 1 byte (27 or 28)
         
         Ok(sig_bytes)
     }

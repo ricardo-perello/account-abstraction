@@ -5,7 +5,7 @@ edition = "2021"
 
 [dependencies]
 # AA SDK integration
-aa-sdk-rs = { git = "https://github.com/bejitono/aa-sdk-rs" }
+aa-sdk-rs = { path = "../../aa-sdk-rs" }
 
 # Keep existing dependencies for CLI and utilities  
 alloy = { version = "0.13.0", features = ["full"] }

@@ -132,26 +132,18 @@ impl PaymasterService {
             Bytes::default()
         };
         
-        // Extract call data from the call field (AccountCall)
-        let call_data = match &user_op.call {
-            Some(_call) => {
-                // For now, we'll encode as empty - this might need more complex handling
-                // depending on the AccountCall structure
-                Bytes::default()
-            }
-            None => Bytes::default()
-        };
+        // Use the actual call_data from the UserOperationRequest
+        let call_data = user_op.call_data.clone().unwrap_or_default();
         
+        // Use actual gas values from UserOperationRequest
         let pre_verification_gas = user_op.pre_verification_gas.unwrap_or_default();
-        
-        // Pack gas limits (verification_gas_limit || call_gas_limit)
-        let verification_gas = user_op.verification_gas_limit.unwrap_or(U256::from(150000));
-        let call_gas = user_op.call_gas_limit.unwrap_or(U256::from(200000));
+        let verification_gas = user_op.verification_gas_limit.unwrap_or_default();
+        let call_gas = user_op.call_gas_limit.unwrap_or_default();
         let account_gas_limits = format!("0x{:032x}{:032x}", verification_gas, call_gas);
         
-        // Pack gas fees (max_priority_fee_per_gas || max_fee_per_gas)
-        let max_priority_fee = user_op.max_priority_fee_per_gas.unwrap_or(U256::from(1000000000u64)); // 1 gwei
-        let max_fee = user_op.max_fee_per_gas.unwrap_or(U256::from(20000000000u64)); // 20 gwei
+        // Use actual gas fee values from UserOperationRequest  
+        let max_priority_fee = user_op.max_priority_fee_per_gas.unwrap_or_default();
+        let max_fee = user_op.max_fee_per_gas.unwrap_or_default();
         let gas_fees = format!("0x{:032x}{:032x}", max_priority_fee, max_fee);
         
         // For now, use empty paymaster_and_data since we'll set it later
@@ -169,32 +161,22 @@ impl PaymasterService {
         })
     }
 
-    /// Build paymaster_and_data field from PaymasterConfig (matches AnvilIntegrationTest format)
+    /// Build paymasterAndData EXTRA DATA ONLY (v0.7): signature + validUntil + validAfter
+    /// The bundler/EntryPoint prefixes address (20) + verificationGas (16) + postOpGas (16).
+    /// Here we must only return the paymaster-specific data: 65 + 8 + 8 = 81 bytes.
     pub fn build_paymaster_and_data(&self, config: &PaymasterConfig) -> Bytes {
         let mut data = Vec::new();
         
-        // Format matches AnvilIntegrationTest.s.sol line 342-349:
-        // abi.encodePacked(address(paymaster), paymasterVerificationGasLimit, paymasterPostOpGasLimit, signature, validUntil, validAfter)
-        
-        // Add paymaster address (20 bytes)
-        data.extend_from_slice(config.paymaster_address.as_slice());
-        
-        // Add paymaster verification gas limit (16 bytes, big-endian uint128)
-        data.extend_from_slice(&50000u128.to_be_bytes());
-        
-        // Add paymaster post-op gas limit (16 bytes, big-endian uint128)
-        data.extend_from_slice(&50000u128.to_be_bytes());
-        
-        // Add signature (65 bytes: r + s + v format as per AnvilIntegrationTest)
+        // Signature (65 bytes: r || s || v)
         data.extend_from_slice(&config.signature);
         
-        // Add valid_until (8 bytes, big-endian uint64)
+        // validUntil (8 bytes, big-endian uint64)
         data.extend_from_slice(&config.valid_until.to_be_bytes());
         
-        // Add valid_after (8 bytes, big-endian uint64)
+        // validAfter (8 bytes, big-endian uint64)
         data.extend_from_slice(&config.valid_after.to_be_bytes());
         
-        // Total: 20 + 16 + 16 + 65 + 8 + 8 = 133 bytes
+        // Total: 65 + 8 + 8 = 81 bytes
         Bytes::from(data)
     }
 }

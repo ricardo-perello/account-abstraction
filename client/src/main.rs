@@ -1031,14 +1031,28 @@ async fn submit_sponsored_user_operation(
     
     let smart_provider = SmartAccountProvider::new(provider, simple_account);
     
-    // Fill UserOperation fields automatically (gas fees already set above)
+    // Fill UserOperation fields first to get gas estimates
     println!("🔧 Filling UserOperation fields...");
     println!("💰 Using gas fees - Max: {} gwei, Priority: {} gwei", 
              max_fee / U256::from(1_000_000_000u64),
              priority_fee / U256::from(1_000_000_000u64));
-    smart_provider.fill_user_operation(&mut user_op_request).await?;
+        smart_provider.fill_user_operation(&mut user_op_request).await?;
+
+    // CRITICAL: Set ALL final gas limits BEFORE paymaster sponsorship request
+    if let Some(pre_verification_gas) = user_op_request.pre_verification_gas {
+        if pre_verification_gas < U256::from(48_000) {
+            user_op_request.pre_verification_gas = Some(U256::from(48_000));
+            println!("🔧 Increased pre_verification_gas to 48,000 for bundler requirements");
+        }
+    }
     
-    // Request paymaster sponsorship
+    // Set gas limits to handle paymaster signature verification BEFORE sponsorship request
+    if user_op_request.verification_gas_limit.is_none() || user_op_request.verification_gas_limit.unwrap() < U256::from(200_000) {
+        user_op_request.verification_gas_limit = Some(U256::from(200_000)); // Increased for account + paymaster verification
+        println!("🔧 Set verification_gas_limit: 200,000");
+    }
+
+    // Request paymaster sponsorship AFTER all gas adjustments are finalized
     println!("💰 Requesting paymaster sponsorship...");
     let paymaster_service = paymaster::PaymasterService::new(
         paymaster_url.to_string(),
@@ -1054,11 +1068,41 @@ async fn submit_sponsored_user_operation(
         .request_sponsorship(&user_op_request, valid_until, Some(0))
         .await?;
     
-    // Add paymaster data to UserOperation
+    // Add paymaster data to UserOperation AFTER filling
     let paymaster_and_data = paymaster_service.build_paymaster_and_data(&paymaster_config);
-    // Note: aa-sdk-rs handles paymaster data differently - this might need adjustment
-    // For now, we'll store it and let the smart provider handle it
     println!("💡 Paymaster data generated: 0x{}", hex::encode(&paymaster_and_data));
+    
+    // CRITICAL: Set paymaster data AFTER fill_user_operation to prevent it being overwritten!
+    user_op_request.paymaster_data = Some(paymaster_and_data.clone());
+    
+    // CRITICAL: Set the paymaster address directly (do not derive from paymaster_data)
+    user_op_request.paymaster = Some(paymaster_addr);
+    println!("🔧 Set paymaster address: {}", paymaster_addr);
+    
+    // Set paymaster gas limits (already set verification_gas_limit above)
+    if user_op_request.paymaster_verification_gas_limit.is_none() {
+        user_op_request.paymaster_verification_gas_limit = Some(U256::from(300_000)); // Increased for signature verification
+        println!("🔧 Set paymaster_verification_gas_limit: 300,000");
+    }
+    if user_op_request.paymaster_post_op_gas_limit.is_none() {
+        user_op_request.paymaster_post_op_gas_limit = Some(U256::from(100_000)); // Increased for safety
+        println!("🔧 Set paymaster_post_op_gas_limit: 100,000");
+    }
+    
+    // FORCE: Clear the default empty paymaster data and set ours
+    println!("🔧 Overriding aa-sdk-rs default paymaster behavior...");
+    
+    // Debug: Verify the paymaster data is actually set
+    println!("🔍 Debug - UserOperation paymaster_data field: {:?}", 
+             user_op_request.paymaster_data.as_ref().map(|d| format!("0x{}", hex::encode(d))));
+    
+    // Debug: Print the full UserOperation structure
+    println!("🔍 Debug - Full UserOperation before submission:");
+    println!("  sender: {:?}", user_op_request.sender);
+    println!("  nonce: {:?}", user_op_request.nonce);
+    println!("  paymaster_data: {:?}", user_op_request.paymaster_data.as_ref().map(|d| hex::encode(d)));
+    println!("  max_fee_per_gas: {:?}", user_op_request.max_fee_per_gas);
+    println!("  max_priority_fee_per_gas: {:?}", user_op_request.max_priority_fee_per_gas);
     
     println!("✅ Paymaster sponsorship obtained!");
     println!("📋 Paymaster data configured - gas will be sponsored");
@@ -1073,7 +1117,7 @@ async fn submit_sponsored_user_operation(
             
             // Track execution status
             println!("📋 Checking transaction execution status...");
-            tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
+            //tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
             
             match smart_provider.get_user_operation_receipt(user_op_hash).await {
                 Ok(Some(receipt)) => {
@@ -1177,7 +1221,21 @@ async fn deploy_sponsored_smart_account(
     // Fill UserOperation fields
     smart_provider.fill_user_operation(&mut user_op_request).await?;
     
-    // Request paymaster sponsorship for deployment
+    // CRITICAL: Set ALL final gas limits BEFORE paymaster sponsorship request
+    if let Some(pre_verification_gas) = user_op_request.pre_verification_gas {
+        if pre_verification_gas < U256::from(48_000) {
+            user_op_request.pre_verification_gas = Some(U256::from(48_000));
+            println!("🔧 Increased pre_verification_gas to 48,000 for bundler requirements");
+        }
+    }
+    
+    // Set gas limits to handle paymaster signature verification BEFORE sponsorship request
+    if user_op_request.verification_gas_limit.is_none() || user_op_request.verification_gas_limit.unwrap() < U256::from(200_000) {
+        user_op_request.verification_gas_limit = Some(U256::from(200_000)); // Increased for account + paymaster verification
+        println!("🔧 Set verification_gas_limit: 200,000");
+    }
+    
+    // Request paymaster sponsorship for deployment AFTER all gas adjustments are finalized
     println!("💰 Requesting paymaster sponsorship for deployment...");
     let paymaster_service = paymaster::PaymasterService::new(
         paymaster_url.to_string(),
@@ -1195,9 +1253,26 @@ async fn deploy_sponsored_smart_account(
     
     // Add paymaster data to UserOperation
     let paymaster_and_data = paymaster_service.build_paymaster_and_data(&paymaster_config);
-    // Note: aa-sdk-rs handles paymaster data differently - this might need adjustment
-    // For now, we'll store it and let the smart provider handle it
     println!("💡 Paymaster data generated: 0x{}", hex::encode(&paymaster_and_data));
+    
+    // CRITICAL: Set paymaster data AFTER fill_user_operation to prevent it being overwritten!
+    user_op_request.paymaster_data = Some(paymaster_and_data.clone());
+    
+    // CRITICAL: Set the paymaster address directly (do not derive from paymaster_data)
+    user_op_request.paymaster = Some(paymaster_addr);
+    println!("🔧 Set paymaster address: {}", paymaster_addr);
+    
+    // Set paymaster gas limits (already set verification_gas_limit above)
+    if user_op_request.paymaster_verification_gas_limit.is_none() {
+        user_op_request.paymaster_verification_gas_limit = Some(U256::from(300_000)); // Increased for signature verification
+        println!("🔧 Set paymaster_verification_gas_limit: 300,000");
+    }
+    if user_op_request.paymaster_post_op_gas_limit.is_none() {
+        user_op_request.paymaster_post_op_gas_limit = Some(U256::from(100_000)); // Increased for safety
+        println!("🔧 Set paymaster_post_op_gas_limit: 100,000");
+    }
+    
+    println!("🔧 Overriding aa-sdk-rs default paymaster behavior...");
     
     println!("✅ Deployment sponsorship approved!");
     println!("📋 Paymaster will cover all deployment costs");

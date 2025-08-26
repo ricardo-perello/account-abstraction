@@ -84,9 +84,15 @@ impl SignatureService {
         request: SponsorshipRequest,
     ) -> Result<SponsorshipResponse, SignatureError> {
         // 1. Check API key
+        println!("🔍 DEBUG: API key validation:");
+        println!("  Received API key: '{}'", request.api_key);
+        println!("  Configured API keys: {:?}", self.api_keys.keys().collect::<Vec<_>>());
+        
         if !self.api_keys.contains_key(&request.api_key) {
+            println!("❌ API key validation failed!");
             return Err(SignatureError::InvalidApiKey);
         }
+        println!("✅ API key validation passed");
 
         // 2. Validate timestamp
         if request.valid_until <= chrono::Utc::now().timestamp() as u64 {
@@ -95,23 +101,41 @@ impl SignatureService {
         
         let valid_after = request.valid_after.unwrap_or(0);
         
+        // DEBUG: Print received UserOperation data
+        println!("🔍 DEBUG: Received UserOperation data:");
+        println!("  sender: {}", request.user_operation.sender);
+        println!("  nonce: {}", request.user_operation.nonce);
+        println!("  init_code: {} (len: {})", request.user_operation.init_code, request.user_operation.init_code.len());
+        println!("  call_data: {} (len: {})", request.user_operation.call_data, request.user_operation.call_data.len());
+        println!("  account_gas_limits: {}", request.user_operation.account_gas_limits);
+        println!("  pre_verification_gas: {}", request.user_operation.pre_verification_gas);
+        println!("  gas_fees: {}", request.user_operation.gas_fees);
+        
         // 3. Create paymaster message hash (matches VerifierSignaturePaymaster._pmHash)
         let paymaster_hash = self.create_paymaster_hash(
             &request.user_operation,
             request.valid_until,
             valid_after
         );
+        println!("🔍 DEBUG: Paymaster hash: {}", hex::encode(&paymaster_hash));
         
         // 4. Apply EIP-191 formatting (matches VerifierSignaturePaymaster digest)
         let eip191_message = self.create_eip191_message(&paymaster_hash);
+        println!("🔍 DEBUG: EIP-191 message: {}", hex::encode(&eip191_message));
         
         // 5. Sign with default verifier key
         let signature = self.key_manager
             .sign_eip191_message("default", &eip191_message)
             .await?;
+        println!("🔍 DEBUG: Generated signature:");
+        println!("  length: {}", signature.len());
+        println!("  hex: {}", hex::encode(&signature));
         
         // 6. Encode paymaster data (signature + validUntil + validAfter)
         let paymaster_data = self.encode_paymaster_data(&signature, request.valid_until, valid_after);
+        println!("🔍 DEBUG: Final paymaster data:");
+        println!("  length: {}", paymaster_data.len());
+        println!("  hex: {}", hex::encode(&paymaster_data));
         
         Ok(SponsorshipResponse {
             signature: hex::encode(&signature),
@@ -173,6 +197,13 @@ impl SignatureService {
         use sha3::{Digest, Keccak256};
         
         let packed_user_op = self.pack_for_paymaster(user_op);
+        println!("🔍 DEBUG: create_paymaster_hash inputs:");
+        println!("  chain_id: {}", self.chain_id);
+        println!("  paymaster_address: {}", hex::encode(&self.paymaster_address));
+        println!("  valid_until: {}", valid_until);
+        println!("  valid_after: {}", valid_after);
+        println!("  packed_user_op length: {}", packed_user_op.len());
+        println!("  packed_user_op: {}", hex::encode(&packed_user_op));
         
         // Solidity abi.encode format for the _pmHash function:
         // abi.encode(_packForPaymaster(u), block.chainid, address(this), validUntil, validAfter)
@@ -215,16 +246,26 @@ impl SignatureService {
             encoded.extend_from_slice(&vec![0u8; padding]);
         }
         
-        let hash = Keccak256::digest(encoded);
+        println!("🔍 DEBUG: Final encoded data for hashing:");
+        println!("  length: {}", encoded.len());
+        println!("  hex: {}", hex::encode(&encoded));
+        
+        let hash = Keccak256::digest(&encoded);
+        println!("🔍 DEBUG: Final paymaster hash: {}", hex::encode(&hash));
         hash.to_vec()
     }
     
     // Apply EIP-191 formatting (matches MessageHashUtils.toEthSignedMessageHash)
     fn create_eip191_message(&self, hash: &[u8]) -> Vec<u8> {
+        use sha3::{Digest, Keccak256};
+        
         let mut message = Vec::new();
         message.extend_from_slice(b"\x19Ethereum Signed Message:\n32");
         message.extend_from_slice(hash);
-        message
+        
+        // Hash the EIP-191 formatted message (this is what toEthSignedMessageHash does)
+        let digest = Keccak256::digest(&message);
+        digest.to_vec()
     }
     
     // Encode paymaster data: signature (65) + validUntil (8) + validAfter (8)
