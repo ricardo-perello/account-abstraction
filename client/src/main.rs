@@ -1042,19 +1042,16 @@ async fn submit_sponsored_user_operation(
              priority_fee / U256::from(1_000_000_000u64));
         smart_provider.fill_user_operation(&mut user_op_request).await?;
 
-    // CRITICAL: Set ALL final gas limits BEFORE paymaster sponsorship request
+    // Ensure pre_verification_gas meets bundler minimum requirements
     if let Some(pre_verification_gas) = user_op_request.pre_verification_gas {
-        if pre_verification_gas < U256::from(48_000) {
-            user_op_request.pre_verification_gas = Some(U256::from(48_000));
-            println!("🔧 Increased pre_verification_gas to 48,000 for bundler requirements");
+        if pre_verification_gas < U256::from(46_000) {
+            user_op_request.pre_verification_gas = Some(U256::from(46_000));
+            println!("🔧 Increased pre_verification_gas to 46,000 to meet bundler minimum");
         }
     }
     
-    // Set gas limits to handle paymaster signature verification BEFORE sponsorship request
-    if user_op_request.verification_gas_limit.is_none() || user_op_request.verification_gas_limit.unwrap() < U256::from(200_000) {
-        user_op_request.verification_gas_limit = Some(U256::from(200_000)); // Increased for account + paymaster verification
-        println!("🔧 Set verification_gas_limit: 200,000");
-    }
+    // Let bundler estimate gas automatically for better efficiency
+    // Removed manual gas limit override to improve gas efficiency ratio
 
     // Request paymaster sponsorship AFTER all gas adjustments are finalized
     println!("💰 Requesting paymaster sponsorship...");
@@ -1083,15 +1080,8 @@ async fn submit_sponsored_user_operation(
     user_op_request.paymaster = Some(paymaster_addr);
     println!("🔧 Set paymaster address: {}", paymaster_addr);
     
-    // Set paymaster gas limits (already set verification_gas_limit above)
-    if user_op_request.paymaster_verification_gas_limit.is_none() {
-        user_op_request.paymaster_verification_gas_limit = Some(U256::from(300_000)); // Increased for signature verification
-        println!("🔧 Set paymaster_verification_gas_limit: 300,000");
-    }
-    if user_op_request.paymaster_post_op_gas_limit.is_none() {
-        user_op_request.paymaster_post_op_gas_limit = Some(U256::from(100_000)); // Increased for safety
-        println!("🔧 Set paymaster_post_op_gas_limit: 100,000");
-    }
+    // Let bundler estimate paymaster gas automatically for better efficiency
+    // Removed manual paymaster gas limit overrides to improve gas efficiency ratio
     
     // FORCE: Clear the default empty paymaster data and set ours
     println!("🔧 Overriding aa-sdk-rs default paymaster behavior...");
@@ -1237,19 +1227,16 @@ async fn deploy_sponsored_smart_account(
     // Fill UserOperation fields
     smart_provider.fill_user_operation(&mut user_op_request).await?;
     
-    // CRITICAL: Set ALL final gas limits BEFORE paymaster sponsorship request
+    // Ensure pre_verification_gas meets bundler minimum requirements (DEPLOYMENT FUNCTION)
     if let Some(pre_verification_gas) = user_op_request.pre_verification_gas {
-        if pre_verification_gas < U256::from(48_000) {
-            user_op_request.pre_verification_gas = Some(U256::from(48_000));
-            println!("🔧 Increased pre_verification_gas to 48,000 for bundler requirements");
+        if pre_verification_gas < U256::from(46_000) {
+            user_op_request.pre_verification_gas = Some(U256::from(46_000));
+            println!("🔧 Increased pre_verification_gas to 46,000 to meet bundler minimum");
         }
     }
     
-    // Set gas limits to handle paymaster signature verification BEFORE sponsorship request
-    if user_op_request.verification_gas_limit.is_none() || user_op_request.verification_gas_limit.unwrap() < U256::from(200_000) {
-        user_op_request.verification_gas_limit = Some(U256::from(200_000)); // Increased for account + paymaster verification
-        println!("🔧 Set verification_gas_limit: 200,000");
-    }
+    // Let bundler estimate gas automatically for better efficiency
+    // Removed manual gas limit override to improve gas efficiency ratio
     
     // Request paymaster sponsorship for deployment AFTER all gas adjustments are finalized
     println!("💰 Requesting paymaster sponsorship for deployment...");
@@ -1278,15 +1265,8 @@ async fn deploy_sponsored_smart_account(
     user_op_request.paymaster = Some(paymaster_addr);
     println!("🔧 Set paymaster address: {}", paymaster_addr);
     
-    // Set paymaster gas limits (already set verification_gas_limit above)
-    if user_op_request.paymaster_verification_gas_limit.is_none() {
-        user_op_request.paymaster_verification_gas_limit = Some(U256::from(300_000)); // Increased for signature verification
-        println!("🔧 Set paymaster_verification_gas_limit: 300,000");
-    }
-    if user_op_request.paymaster_post_op_gas_limit.is_none() {
-        user_op_request.paymaster_post_op_gas_limit = Some(U256::from(100_000)); // Increased for safety
-        println!("🔧 Set paymaster_post_op_gas_limit: 100,000");
-    }
+    // Let bundler estimate paymaster gas automatically for better efficiency (DEPLOYMENT FUNCTION)
+    // Removed manual paymaster gas limit overrides to improve gas efficiency ratio
     
     println!("🔧 Overriding aa-sdk-rs default paymaster behavior...");
     
