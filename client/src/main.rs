@@ -431,6 +431,7 @@ async fn submit_user_operation_fixed(
     let url = url::Url::parse(rpc_url)?;
     let provider = ProviderBuilder::new().on_http(url);
     
+    // TODO: Migrate to SimpleAccount::new_with_salt for better salt support
     let simple_account = SimpleAccount::new(
         Arc::new(provider.clone()),
         wallet.address(),
@@ -637,6 +638,7 @@ async fn deploy_smart_account(
             
             // Create SimpleAccount with proper factory address
             let entry_point_addr = Address::from_str("0x0000000071727De22E5E9d8BAf0edAc6f37da032")?;
+            // TODO: Migrate to SimpleAccount::new_with_salt for better salt support
             let simple_account = SimpleAccount::new(
                 Arc::new(provider.clone()),
                 wallet.address(),      // Owner (EOA)
@@ -771,6 +773,7 @@ async fn deploy_multi_owner_account(
     // ⚠️ LIMITATION: aa-sdk-rs SimpleAccount doesn't support multi-owner natively
     // Using first owner as primary owner, factory must handle multi-owner logic
     let primary_owner = owner_addresses[0];
+    // TODO: Migrate to SimpleAccount::new_with_salt for better salt support
     let simple_account = SimpleAccount::new(
         Arc::new(provider.clone()),
         primary_owner,         // Primary owner from the list
@@ -981,6 +984,7 @@ async fn submit_sponsored_user_operation(
     let url = url::Url::parse(rpc_url)?;
     let provider = ProviderBuilder::new().on_http(url);
     
+    // TODO: Migrate to SimpleAccount::new_with_salt for better salt support
     let simple_account = SimpleAccount::new(
         Arc::new(provider.clone()),
         wallet.address(),
@@ -1200,6 +1204,7 @@ async fn deploy_sponsored_smart_account(
     let provider = ProviderBuilder::new().on_http(url);
     
     let entry_point_addr = Address::from_str("0x0000000071727De22E5E9d8BAf0edAc6f37da032")?;
+    // TODO: Migrate to SimpleAccount::new_with_salt for better salt support
     let simple_account = SimpleAccount::new(
         Arc::new(provider.clone()),
         wallet.address(),
